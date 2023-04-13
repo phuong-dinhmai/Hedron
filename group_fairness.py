@@ -1,3 +1,5 @@
+import random
+
 from pymoo.problems.functional import FunctionalProblem
 from pymoo.algorithms.moo.nsga3 import NSGA3
 from pymoo.optimize import minimize
@@ -8,7 +10,7 @@ import numpy as np
 import pandas as pd
 from utils import *
 
-tolerance = 1e6
+tolerance = 1e-6
 
 
 class Expohedron_test:
@@ -23,72 +25,67 @@ class Expohedron_test:
         assert np.all(0 <= relevance_vector) and np.all(relevance_vector <= 1), "The values of `relevance_vector` must all be between 0 and 1"
         self.relevance_vector = relevance_vector
         self.item_list = item_list
-        self.pbm = 1 / np.log(np.arange(0, n_doc) + 2) # the DCG exposure  
+        self.pbm = 1 / np.log(np.arange(0, n_doc) + 2) #the DCG exposure
         self.n = len(relevance_vector)
         self.prp_vertex = self.pbm[invert_permutation(np.argsort(-relevance_vector))]
         self.prp_utility = np.sum(self.prp_vertex * relevance_vector)
         
-        group_size = item_list.sum(axis=0)
-        self.fair_exposure = self.pbm.sum() / group_size.sum() * group_size
+        group_size = np.matmul(self.relevance_vector, item_list)
+        self.fair_exposure = group_size / np.sum(group_size) * np.sum(self.pbm)
+        print(self.fair_exposure)
 
         objs = [
             lambda x: np.sum(x * self.relevance_vector),
-            lambda x: np.sum(np.matmul(x * self.relevance_vector, self.item_list) - self.fair_exposure) ** 2
+            lambda x: np.sum((np.matmul(x, self.item_list) - self.fair_exposure) ** 2)
         ]
 
         ieq_constrs = []
         for i in range(self.n):
             ieq_constrs.append(
-                lambda x: np.sum((-np.sort(-x))[:i]) - np.sum(self.pbm[::-1][:i]) + tolerance,
+                lambda x: np.sum(self.pbm[:i]) - np.sum((-np.sort(-x))[:i]) - tolerance,
             )
-        ieq_constrs.append( 
-            lambda x: np.abs(np.sum(x) - np.sum(self.pbm)) < tolerance
-        )
+        eq_constrs = [lambda x: np.abs(np.sum(x) - np.sum(self.pbm))]
 
-        self.problem = FunctionalProblem(n_var=self.n, objs=objs, constr_ieq=ieq_constrs, xl=1/np.log(n_doc+1), xu=1/np.log(2))
+        self.problem = FunctionalProblem(n_var=self.n, objs=objs, constr_ieq=ieq_constrs, constr_eq=eq_constrs,
+                                         xl=1/np.log(n_doc+1), xu=1/np.log(2))
 
     def optimize(self):
-        ref_dirs = get_reference_directions("das-dennis", 2, n_partitions=12)
+        ref_dirs = get_reference_directions("das-dennis", 2, n_partitions=8)
 
         # create the algorithm object
         algorithm = NSGA3(
-            pop_size=50,
+            pop_size=16,
             ref_dirs=ref_dirs
         )
 
         res = minimize(self.problem,
-                    algorithm,
-                    ('n_gen', 200),
-                    seed=1,
-                    verbose=False)
-        Scatter().add(res.F).show()
-
+                       algorithm,
+                       ('n_gen', 200),
+                       seed=1,
+                       verbose=False)
+        print(res.F)
+        print(self.evaluate(self.prp_vertex))
 
     def evaluate(self, x):
         user_utilities = np.sum(x * self.relevance_vector)
-        unfairness = np.matmul(x * self.relevance_vector, self.item_list) - self.fair_exposure
-        return np.column_stack([self.prp_utility - user_utilities, np.sum(unfairness ** 2)])
+        unfairness = np.matmul(x, self.item_list)
+        print(unfairness)
+        # for i in range(self.n):
+        #     print(np.sum(self.pbm[:i]) - np.sum((-np.sort(-x))[:i]) - tolerance)
+        return np.column_stack([self.prp_utility - user_utilities, np.sum((unfairness - self.fair_exposure)) ** 2])
 
 
 if __name__ == "__main__":
     n_doc = 100
+    n_group = 5
     np.random.seed(n_doc)
     relevance_score = np.random.rand(n_doc)
-    item_list = pd.read_csv("/home/phuong/Documents/RecSysReranking/data/ml-100k/u.item",
-                        sep='|',
-                        engine="python",
-                        encoding="latin-1",
-                        names=["item", "movie_title", "release_date", "video_release_date",
-                                "IMDb_URL", "unknown", "Action", "Adventure", "Animation",
-                                "Children", "Comedy", "Crime", "Documentary", "Drama", "Fantasy",
-                                "Film_Noir", "Horror", "Musical", "Mystery", "Romance", "Sci_Fi",
-                                "Thriller", "War", "Western"],
-                        usecols=["item", "unknown", "Action", "Adventure", "Animation",
-                                "Children", "Comedy", "Crime", "Documentary", "Drama", "Fantasy",
-                                "Film_Noir", "Horror", "Musical", "Mystery", "Romance", "Sci_Fi",
-                                "Thriller", "War", "Western"],
-                        nrows=100
-                        )
+    item_list = np.zeros((n_doc, n_group))
+    for i in range(n_doc):
+        j = random.randint(0, n_group-1)
+        item_list[i][j] = 1
 
-    hedron = Expohedron_test(relevance_vector=relevance_score, item_list=item_list.to_numpy())
+    hedron = Expohedron_test(relevance_vector=relevance_score, item_list=item_list)
     hedron.optimize()
+
+
