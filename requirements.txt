@@ -1,6 +1,8 @@
+pymoo==0.6.0.1
+scipy==1.10.1
+pandas==1.5.3
+cvxopt==0.4.3
+# modified version from pymoo
 numpy
-scipy
-pandas
 matplotlib
 tqdm
-cvxopt
