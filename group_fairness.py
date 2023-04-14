@@ -10,6 +10,8 @@ import numpy as np
 import pandas as pd
 from utils import *
 
+from expohedron import caratheodory_decomposition_pbm_gls
+
 tolerance = 1e-6
 
 
@@ -24,6 +26,7 @@ class Expohedron_test:
     def __init__(self, relevance_vector, item_list) -> None:
         assert np.all(0 <= relevance_vector) and np.all(relevance_vector <= 1), "The values of `relevance_vector` must all be between 0 and 1"
         self.relevance_vector = relevance_vector
+        n_doc = relevance_score.shape[0]
         self.item_list = item_list
         self.pbm = 1 / np.log(np.arange(0, n_doc) + 2) #the DCG exposure
         self.n = len(relevance_vector)
@@ -60,30 +63,35 @@ class Expohedron_test:
 
         res = minimize(self.problem,
                        algorithm,
-                       ('n_gen', 200),
+                       ('n_gen', 600),
                        seed=1,
-                       verbose=False)
+                       verbose=True)
         print(res.F)
-        print(self.evaluate(self.prp_vertex))
 
     def evaluate(self, x):
         user_utilities = np.sum(x * self.relevance_vector)
         unfairness = np.matmul(x, self.item_list)
-        print(unfairness)
         # for i in range(self.n):
         #     print(np.sum(self.pbm[:i]) - np.sum((-np.sort(-x))[:i]) - tolerance)
         return np.column_stack([self.prp_utility - user_utilities, np.sum((unfairness - self.fair_exposure)) ** 2])
 
 
 if __name__ == "__main__":
-    n_doc = 100
-    n_group = 5
-    np.random.seed(n_doc)
-    relevance_score = np.random.rand(n_doc)
-    item_list = np.zeros((n_doc, n_group))
-    for i in range(n_doc):
-        j = random.randint(0, n_group-1)
-        item_list[i][j] = 1
+    # n_doc = 100
+    # n_group = 5
+    # np.random.seed(n_doc)
+    # relevance_score = np.random.rand(n_doc)
+    # np.savetxt("data/relevance_score.csv", relevance_score, delimiter=",")
+
+    # item_list = np.zeros((n_doc, n_group))
+    # for i in range(n_doc):
+    #     j = random.randint(0, n_group-1)
+    #     item_list[i][j] = 1
+
+    # np.savetxt("data/item_group.csv", item_list, delimiter=",")
+    
+    relevance_score = np.loadtxt("data/relevance_score.csv", delimiter=",", dtype=np.double)
+    item_list = np.loadtxt("data/item_group.csv", delimiter=",", dtype=np.int)
 
     hedron = Expohedron_test(relevance_vector=relevance_score, item_list=item_list)
     hedron.optimize()
