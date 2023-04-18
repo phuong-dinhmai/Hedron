@@ -1,4 +1,5 @@
 import random
+import time
 
 from pymoo.problems.functional import FunctionalProblem
 from pymoo.algorithms.moo.nsga3 import NSGA3
@@ -12,7 +13,7 @@ from utils import *
 
 from expohedron import caratheodory_decomposition_pbm_gls
 
-tolerance = 1e-6
+tolerance = 1e-12
 
 
 class Expohedron_test:
@@ -29,23 +30,23 @@ class Expohedron_test:
         n_doc = relevance_score.shape[0]
         self.item_list = item_list
         self.pbm = 1 / np.log(np.arange(0, n_doc) + 2) #the DCG exposure
-        self.n = len(relevance_vector)
+        self.n = n_doc
         self.prp_vertex = self.pbm[invert_permutation(np.argsort(-relevance_vector))]
         self.prp_utility = np.sum(self.prp_vertex * relevance_vector)
         
-        group_size = np.matmul(self.relevance_vector, item_list)
+        group_size = self.relevance_vector @ item_list
         self.fair_exposure = group_size / np.sum(group_size) * np.sum(self.pbm)
-        print(self.fair_exposure)
+        # print(self.fair_exposure)
 
         objs = [
-            lambda x: np.sum(x * self.relevance_vector),
-            lambda x: np.sum((np.matmul(x, self.item_list) - self.fair_exposure) ** 2)
+            lambda x: self.prp_utility - x @ self.relevance_vector.T,
+            lambda x: np.sum((x @ self.item_list - self.fair_exposure) ** 2)
         ]
 
         ieq_constrs = []
-        for i in range(self.n):
+        for i in range(self.n-1):
             ieq_constrs.append(
-                lambda x: np.sum(self.pbm[:i]) - np.sum((-np.sort(-x))[:i]) - tolerance,
+                lambda x: np.sum((-np.sort(-x))[:i]) - np.sum((-np.sort(-self.pbm))[:i]) - tolerance,
             )
         eq_constrs = [lambda x: np.abs(np.sum(x) - np.sum(self.pbm))]
 
@@ -53,24 +54,25 @@ class Expohedron_test:
                                          xl=1/np.log(n_doc+1), xu=1/np.log(2))
 
     def optimize(self):
-        ref_dirs = get_reference_directions("das-dennis", 2, n_partitions=8)
+        ref_dirs = get_reference_directions("das-dennis", 2, n_partitions=16)
 
         # create the algorithm object
         algorithm = NSGA3(
-            pop_size=16,
+            pop_size=20,
             ref_dirs=ref_dirs
         )
 
         res = minimize(self.problem,
                        algorithm,
                        ('n_gen', 600),
-                       seed=1,
+                       seed=4,
                        verbose=True)
         print(res.F)
+        return res.X
 
     def evaluate(self, x):
         user_utilities = np.sum(x * self.relevance_vector)
-        unfairness = np.matmul(x, self.item_list)
+        unfairness = x @ self.item_list
         # for i in range(self.n):
         #     print(np.sum(self.pbm[:i]) - np.sum((-np.sort(-x))[:i]) - tolerance)
         return np.column_stack([self.prp_utility - user_utilities, np.sum((unfairness - self.fair_exposure)) ** 2])
@@ -90,10 +92,25 @@ if __name__ == "__main__":
 
     # np.savetxt("data/item_group.csv", item_list, delimiter=",")
     
-    relevance_score = np.loadtxt("data/relevance_score.csv", delimiter=",", dtype=np.double)
-    item_list = np.loadtxt("data/item_group.csv", delimiter=",", dtype=np.int)
+    relevance_score = np.loadtxt("data/relevance_score.csv", delimiter=",").astype(np.double)
+    item_list = np.loadtxt("data/item_group.csv", delimiter=",").astype(np.int32)
 
     hedron = Expohedron_test(relevance_vector=relevance_score, item_list=item_list)
-    hedron.optimize()
+    exposure_results = hedron.optimize()
+
+    for exposure in exposure_results:
+        # Decompose the fairness endpoint
+        for i in range(hedron.n-1):
+            print(np.sum((-np.sort(-exposure))[:i]) - np.sum((-np.sort(-hedron.pbm))[:i]) - tolerance)
+        print(np.cumsum(-np.sort(-exposure)) - np.cumsum(-np.sort(-hedron.pbm)) - tolerance)
+        print(np.abs(np.sum(exposure) - np.sum(hedron.pbm)))
+
+        tic = time.time()
+        convex_coefficients, vertices = caratheodory_decomposition_pbm_gls(hedron.pbm, exposure)
+        toc = time.time()
+        print("The Carathéodory decomposition took " + str(toc - tic) + " seconds.")
+
+        print(convex_coefficients)
+        print(vertices)
 
 
