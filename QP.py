@@ -1,6 +1,7 @@
 import cvxpy as cp
 import numpy as np
 import argparse
+import random
 
 from helpers import evaluate_probabilty
 
@@ -32,7 +33,6 @@ class QP:
         self.constraints = [0 <= self.ranking_probability, self.ranking_probability <= 1]
         self.constraints.append(cp.sum(self.ranking_probability, axis=0) == np.ones((n_doc)))
         self.constraints.append(cp.sum(self.ranking_probability, axis=1) == np.ones((n_doc)))
-        print(self.constraints)
 
         self.obj_func = cp.Maximize(self.alpha * (relevance_score.T @ self.ranking_probability) @ self.gamma  \
                         - (1-self.alpha) * cp.sum((self.ranking_probability @ self.gamma @ self.item_list - self.fair_exposure) ** 2))
@@ -46,6 +46,19 @@ class QP:
         return prob.status, self.ranking_probability.value
 
 if __name__ == "__main__":
+    # n_doc = 100
+    # n_group = 5
+    # np.random.seed(n_doc)
+    # relevance_score = np.random.rand(n_doc)
+    # np.savetxt("data/relevance_score.csv", relevance_score, delimiter=",")
+
+    # item_list = np.zeros((n_doc, n_group))
+    # for i in range(n_doc):
+    #     j = random.randint(0, n_group-1)
+    #     item_list[i][j] = 1
+
+    # np.savetxt("data/item_group.csv", item_list, delimiter=",")
+
     relevance_score = np.loadtxt("data/relevance_score.csv", delimiter=",").astype(np.double)
     item_list = np.loadtxt("data/item_group.csv", delimiter=",").astype(np.int32)
 
@@ -53,7 +66,7 @@ if __name__ == "__main__":
 
     pareto_set = []
     pareto_front = []
-    alpha_arr = np.arange(1, 11) / 10
+    alpha_arr = np.arange(0, 11) / 10
     for alpha in alpha_arr:
         solver = QP(relevance_score=relevance_score.reshape((100, 1)), item_list=item_list, alpha=alpha)
         status, result = solver.optimize()
