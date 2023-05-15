@@ -16,7 +16,7 @@ from pymoo.util.ref_dirs import get_reference_directions
 from utils import *
 from expohedron import caratheodory_decomposition_pbm_gls, majorized
 
-from helpers import evaluate_probabilty
+from evaluation import evaluate_probabilty
 
 tolerance = 1e-6
 

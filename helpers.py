@@ -1,32 +1,144 @@
 import numpy as np
-from billiard import billiard_word
-from utils import compute_unfairness
+
+LOW_TOLERANCE = 1e-12
 
 
-def evaluate_probabilty(ranking_probability: np.array, relevance_score: np.array, item_list: np.array):
-    n_doc = relevance_score.shape[0]
-    gamma = 1 / np.log(np.arange(0, n_doc) + 2) #the DCG exposure
+def is_ranking(ranking: np.ndarray, size: int = None):
+    """
+        Checks if `ranking` is a ranking, i.e. performs simple asserts to check if `ranking` is a valid ranking
+    :param ranking: a ranking whose formatting is to be checked
+    :type ranking: np.ndarray
+    :param size: The size of the ranking, optional
+    :type size: int
+    """
+    if size is not None:
+        assert len(ranking) == size, "`ranking` must be of size " + str(size)
+    else:
+        size = len(ranking)
+    assert np.all(np.sort(ranking) == np.arange(0, size)), "`ranking` is not a permutation of {0,...,n-1}"
+    return True
 
-    group_size = relevance_score @ item_list
-    fair_exposure = group_size / np.sum(group_size) * np.sum(gamma)
-    
-    user_utilities = np.sum((relevance_score.T @ ranking_probability) * gamma)
-    unfairness = np.sum((ranking_probability @ gamma @ item_list - fair_exposure) ** 2)
-    return user_utilities, unfairness
+
+def invert_permutation(permutation):
+    """
+    Inverts a permutation: If `permutation[i]==j`, then `invert_permutation(permutation)[j]==i`.
+
+    :param permutation: A permutation represented as an array containing the integers 0 to n
+    :type permutation: numpy.ndarray
+    :return: The inverse permutation
+    :rtype: numpy.ndarray
+    """
+    return np.argsort(permutation)
 
 
-def time_horizon_evaluate(ranking_probability, vertices, relevance_score, fair_exposure, pbm):
-    # Delivery
-    time_horizon = 2  # how many rankings should be delivered
-    generator = billiard_word(ranking_probability)
-    exposure = 0
-    utility_matrix = np.zeros(time_horizon) * np.nan
-    unfairness_matrix = np.zeros(time_horizon) * np.nan
-    idcg = relevance_score @ pbm
-    for k in np.arange(0, 2*len(pbm)):
-        index = next(generator)  # Faire chauffer l'appareil
-    for t in np.arange(1, time_horizon):
-        index = next(generator)
-        exposure += vertices[:, index]
-        utility_matrix[t] = exposure/t @ relevance_score / idcg
-        unfairness_matrix[t] = compute_unfairness(exposure/t, fair_exposure) / np.sum(pbm)
+def majorized(a: np.array, b: np.array, tolerance: float = LOW_TOLERANCE) -> bool:
+    """
+        Checks whether `a` is majorized by `b`: a<b
+
+        :param a: The left hand side of the comparison a<b
+        :type a: numpy.array
+        :param b: The right hand side of the comparison a<b
+        :type b: numpy.array
+        :param tolerance: the tolerance that is allowed
+        :type tolerance: float
+        :return: `True` if a < b, false otherwise
+        :rtype: bool
+    """
+    return np.all(np.cumsum(-np.sort(-a)) <= np.cumsum(-np.sort(-b)) + tolerance) and np.abs(np.sum(a) - np.sum(b)) < tolerance
+
+
+def orthogonal_complement(x: np.ndarray, normalize: bool = False, threshold: float = LOW_TOLERANCE):
+    """
+        Compute orthogonal complement of a matrix
+
+        This works along axis zero, i.e. rank == column rank, or number of rows > column rank otherwise orthogonal complement is empty
+        :param x: the matrix need to find the orthogonal complement
+        :type x: numpy.ndarray
+        :param normalize: equals True if the orthogonal vectors of complement need to standardize.
+        :type normalize: bool
+        :param tolerance: the tolerance that is allowed
+        :type tolerance: float
+        :return: List of orthogonal vector of the complement if have, None otherwise
+        :rtype: np.ndarray
+    """
+    x = np.asarray(x)
+    r, c = x.shape
+    if r < c:
+        import warnings
+        warnings.warn('fewer rows than columns', UserWarning)
+
+    # we assume svd is ordered by decreasing singular value, o.w. need sort
+    s, v, d = np.linalg.svd(x)
+    rank = (v > threshold).sum()
+
+    oc = s[:, rank:]
+
+    if normalize:
+        k_oc = oc.shape[1]
+        oc = oc.dot(np.linalg.inv(oc[:k_oc, :]))
+    return oc
+
+
+def direction_projecion_on_subspace(direction: np.ndarray, subspace_matrix: np.ndarray):
+    """
+        Compute vector projection in any subspace when the orthorgonal vector of the subspace is known
+
+        :param direction: the 1D vector need to find the projection 
+        :type a: numpy.array
+        :param subspace_matrix: the matrix of othorgonal vector represent the subspace (each row is an vector)
+        :type subspace_matrix: numpy.ndarray
+        :return: The projection of the direction vector in the subspace 
+        :rtype: numpy.ndarray (1D)   
+    """
+    orthogonal_direction = np.zeros(direction.shape)
+    for orthogonal_vector in subspace_matrix:
+        projection = np.dot(orthogonal_vector, direction) / np.dot(orthogonal_vector, orthogonal_vector) * orthogonal_vector
+        orthogonal_direction += projection
+    return orthogonal_direction
+
+
+def find_face_intersection_bisection(gamma: np.ndarray, starting_point: np.ndarray, direction: np.ndarray, precision: float) -> np.ndarray:
+    """
+        Executes a bisection search in the PBM-expohedron using the majorization criterion.
+
+        It finds the intersection of a half-line starting at `starting_point` in the direction `direction` with the border of the expohedron defined by `gamma`.
+    :param gamma: Any vertex of the PBM-expohedron
+    :type gamma: numpy.ndarray
+    :param starting_point: The starting point of the half-line
+    :type starting_point: numpy.ndarray
+    :param direction: The direction of the half-line
+    :type direction: numpy.ndarray
+    :param precision: The presicion required for termination of bisection
+    :type precision: float, optional
+    :return: The intersection of the expohedron's boundary with the half-line
+    :rtype numpy.ndarray
+    """
+    # 0. Input checks
+    n = len(gamma)
+    assert n == len(starting_point), "`starting_point` does not have the same length as `gamma`."
+    assert n == len(direction), "`direction` does not have the same length as `gamma`."
+    assert majorized(starting_point, gamma), "`starting_point` needs to be majorized by `gamma`. Check your inputs or decrease majorization tolerance."
+
+    # direction = direction / np.linalg.norm(direction)  # normalize direction
+    # 1. Find upper and lower bound
+    k = 1
+    while majorized((starting_point + k*direction) / np.sum((starting_point + k*direction)) * np.sum(gamma), gamma):  
+        # We make sure the tested point is in the hyperplane containing the expohedron
+        # The division phase is for point projection to expohedron
+        k *= 2
+    upper_bound = (starting_point + k*direction) / np.sum((starting_point + k*direction)) * np.sum(gamma)
+    lower_bound = starting_point
+
+    # 2. Do bisection
+    nb_iterations = 0
+    while True:
+        nb_iterations += 1
+        center = (upper_bound + lower_bound) / 2
+        if majorized(center, gamma, tolerance=precision):  # project center on face's affine subspace
+            lower_bound = center
+        else:
+            upper_bound = center
+        if np.all(np.abs(upper_bound - lower_bound) < precision):
+            return lower_bound
+        else:
+            pass

@@ -3,7 +3,7 @@ import numpy as np
 import argparse
 import random
 
-from helpers import evaluate_probabilty
+from evaluation import evaluate_probabilty
 
 parser = argparse.ArgumentParser()
 parser.add_argument("-alpha", type=float, help="Trade off hyperparameter between utilities and fairness", default=0.5)
