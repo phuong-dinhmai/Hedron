@@ -1,4 +1,5 @@
 import numpy as np
+from scipy.linalg import orth
 
 LOW_TOLERANCE = 1e-12
 
@@ -45,6 +46,14 @@ def majorized(a: np.array, b: np.array, tolerance: float = LOW_TOLERANCE) -> boo
         :rtype: bool
     """
     return np.all(np.cumsum(-np.sort(-a)) <= np.cumsum(-np.sort(-b)) + tolerance) and np.abs(np.sum(a) - np.sum(b)) < tolerance
+
+
+def projection_matrix_on_subspace(U: np.ndarray):
+    """
+        Projection matrices onto the two sub-spaces spanned by the columns of U
+    """
+    matrix = U @ np.linalg.inv(U.T @ U) @ U.T
+    return matrix
 
 
 def orthogonal_complement(x: np.ndarray, normalize: bool = False, threshold: float = LOW_TOLERANCE):
@@ -97,6 +106,24 @@ def direction_projecion_on_subspace(direction: np.ndarray, subspace_matrix: np.n
     return orthogonal_direction
 
 
+def intersect_vector_space(orthogonal_space_1: np.ndarray, orthogonal_space_2: np.ndarray):
+    """
+        Return basis vectors of intersection of 2 vector space
+        (solution find in https://math.stackexchange.com/questions/767882/linear-algebra-vector-space-how-to-find-intersection-of-two-subspaces)
+
+        :param orthogonal_space_1: Basis vectors of the first vector space (column is the basis vector)
+        :param orthogonal_space_2: Basis vectors of the second vector space (column is the basis vector)
+    """
+    # TODO: why is it subtract but not substitution like in the solution?
+    P_u = projection_matrix_on_subspace(orthogonal_space_1)
+    P_v = projection_matrix_on_subspace(orthogonal_space_2)
+    # print(P_u)
+    # print(P_v)
+    # print(orth(P_u - P_v))
+    return orthogonal_complement(orth(P_u - P_v))
+    # return orthogonal_complement(orth(P_u @ P_v - np.identity(orthogonal_space_1.shape[0])))
+
+
 def find_face_intersection_bisection(gamma: np.ndarray, starting_point: np.ndarray, direction: np.ndarray, precision: float) -> np.ndarray:
     """
         Executes a bisection search in the PBM-expohedron using the majorization criterion.
@@ -142,3 +169,9 @@ def find_face_intersection_bisection(gamma: np.ndarray, starting_point: np.ndarr
             return lower_bound
         else:
             pass
+
+
+if __name__ == "__main__":
+    U = np.asarray([(1, 3, 4), (2, 5, 1)]).T
+    V = np.asarray([(1, 1, 2), (2, 2, 1)]).T
+    intersection_vector_space = intersect_vector_space(U, V)
