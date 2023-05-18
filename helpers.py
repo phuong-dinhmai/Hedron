@@ -88,21 +88,18 @@ def orthogonal_complement(x: np.ndarray, normalize: bool = False, threshold: flo
     return oc
 
 
-def direction_projecion_on_subspace(direction: np.ndarray, subspace_matrix: np.ndarray):
+def direction_projection_on_subspace(direction: np.ndarray, subspace_matrix: np.ndarray):
     """
         Compute vector projection in any subspace when the orthorgonal vector of the subspace is known
 
         :param direction: the 1D vector need to find the projection 
-        :type a: numpy.array
+        :type direction: numpy.array
         :param subspace_matrix: the matrix of othorgonal vector represent the subspace (each row is an vector)
         :type subspace_matrix: numpy.ndarray
         :return: The projection of the direction vector in the subspace 
         :rtype: numpy.ndarray (1D)   
     """
-    orthogonal_direction = np.zeros(direction.shape)
-    for orthogonal_vector in subspace_matrix.T:
-        projection = np.dot(orthogonal_vector, direction) / np.dot(orthogonal_vector, orthogonal_vector) * orthogonal_vector
-        orthogonal_direction += projection
+    orthogonal_direction = projection_matrix_on_subspace(subspace_matrix) @ direction
     # Normalize vector
     return orthogonal_direction / np.linalg.norm(orthogonal_direction)
 
@@ -110,18 +107,14 @@ def direction_projecion_on_subspace(direction: np.ndarray, subspace_matrix: np.n
 def intersect_vector_space(orthogonal_space_1: np.ndarray, orthogonal_space_2: np.ndarray):
     """
         Return basis vectors of intersection of 2 vector space
-        (solution find in https://math.stackexchange.com/questions/767882/linear-algebra-vector-space-how-to-find-intersection-of-two-subspaces)
+        (solution find inhttps://math.stackexchange.com/questions/25371/how-to-find-a-basis-for-the-intersection-of-two-vector-spaces-in-mathbbrn)
 
         :param orthogonal_space_1: Basis vectors of the first vector space (column is the basis vector)
         :param orthogonal_space_2: Basis vectors of the second vector space (column is the basis vector)
     """
-    # TODO: why is it subtract but not substitution like in the solution?
-    P_u = projection_matrix_on_subspace(orthogonal_space_1)
-    P_v = projection_matrix_on_subspace(orthogonal_space_2)
-    # print(P_u)
-    # print(P_v)
-    # print(orth(P_u - P_v))
-    return orthogonal_complement(orth(P_u - P_v))
+    solution_space = np.append(orthogonal_space_1, -orthogonal_space_2, axis=1)
+    null_space = orthogonal_complement(orth(solution_space))
+    return null_space
     # return orthogonal_complement(orth(P_u @ P_v - np.identity(orthogonal_space_1.shape[0])))
 
 
@@ -173,6 +166,8 @@ def find_face_intersection_bisection(gamma: np.ndarray, starting_point: np.ndarr
 
 
 if __name__ == "__main__":
-    U = np.asarray([(1, 3, 4), (2, 5, 1)]).T
-    V = np.asarray([(1, 1, 2), (2, 2, 1)]).T
+    U = np.asarray([(1,1,0,-1), (0,1,3,1)]).T
+    V = np.asarray([(0,-1,-2,1), (1,2,2,-2)]).T
+    print(U.T @ V)
     intersection_vector_space = intersect_vector_space(U, V)
+    print(intersection_vector_space)

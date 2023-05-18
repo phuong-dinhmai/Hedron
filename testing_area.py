@@ -4,7 +4,7 @@ import random
 from scipy.linalg import orth
 
 from expohederon_group_fairness import PBMexpohedron
-from helpers import orthogonal_complement, direction_projecion_on_subspace, projection_matrix_on_subspace, intersect_vector_space
+from helpers import orthogonal_complement, direction_projection_on_subspace, intersect_vector_space
 
 
 def draw():
@@ -62,9 +62,12 @@ def toy_example():
     expohedron.set_fairness(group_fairness)
     expohedron_basis = np.asarray([[1] * n_doc]).T
     fairness_level_direction_space = orthogonal_complement(item_group_masking, False)
+    # print(fairness_level_direction_space)
+    # Since the vector space is orthogonal with a subspace in the expohedron space
+    # The intersection space will also be the projection space
     fairness_level_projection_space = intersect_vector_space(fairness_level_direction_space, expohedron_basis)
-    print(fairness_level_projection_space)
-    optimal_fairness_direction = direction_projecion_on_subspace(relevance_score, fairness_level_projection_space)
+    # print(fairness_level_projection_space)
+    optimal_fairness_direction = direction_projection_on_subspace(relevance_score, fairness_level_projection_space)
     print(optimal_fairness_direction)
 
 
