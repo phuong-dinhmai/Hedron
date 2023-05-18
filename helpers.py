@@ -100,10 +100,11 @@ def direction_projecion_on_subspace(direction: np.ndarray, subspace_matrix: np.n
         :rtype: numpy.ndarray (1D)   
     """
     orthogonal_direction = np.zeros(direction.shape)
-    for orthogonal_vector in subspace_matrix:
+    for orthogonal_vector in subspace_matrix.T:
         projection = np.dot(orthogonal_vector, direction) / np.dot(orthogonal_vector, orthogonal_vector) * orthogonal_vector
         orthogonal_direction += projection
-    return orthogonal_direction
+    # Normalize vector
+    return orthogonal_direction / np.linalg.norm(orthogonal_direction)
 
 
 def intersect_vector_space(orthogonal_space_1: np.ndarray, orthogonal_space_2: np.ndarray):

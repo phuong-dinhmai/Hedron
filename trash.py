@@ -35,33 +35,37 @@ def draw():
 
 
 def toy_example():
-    gamma = np.asarray([4, 2, 1])
-    group_fairness = np.asarray([3.5, 3.5])
-    relevance_score = np.asarray([0.7, 0.8, 0.3])
+    # n_doc = 3
+    # n_group = 2
+    # gamma = np.asarray([4, 2, 1])
+    # group_fairness = np.asarray([3.5, 3.5])
+    # relevance_score = np.asarray([0.7, 0.5, 1])
     # item_group_masking = np.asarray([[1, 0], [1, 0], [0, 1]])
 
     n_doc = 10
     n_group = 3
+    relevance_score = np.loadtxt("data/relevance_score.csv", delimiter=",").astype(np.double)
+    item_group_masking = np.loadtxt("data/item_group.csv", delimiter=",").astype(np.int32)
     # np.random.seed(n_doc)
     # relevance_score = np.random.rand(n_doc)
     # np.savetxt("data/relevance_score.csv", relevance_score, delimiter=",")
-    #
+    
     # item_group_masking = np.zeros((n_doc, n_group))
     # for i in range(n_doc):
     #     j = random.randint(0, n_group-1)
     #     item_group_masking[i][j] = 1
     # np.savetxt("data/item_group.csv", item_group_masking, delimiter=",")
-    # relevance_score = np.loadtxt("data/relevance_score.csv", delimiter=",").astype(np.double)
-    item_group_masking = np.loadtxt("data/item_group.csv", delimiter=",").astype(np.int32)
-
-    # expohedron = PBMexpohedron(pbm=gamma, relevance_vector=relevance_score, item_group_mask=item_group_masking)
-    # expohedron.set_fairness(group_fairness)
+    gamma = np.asarray([1/np.log2(2+1) for i in range(0, n_doc)])
+    group_fairness = np.sum(gamma) / n_group * np.asarray([1] * n_group)
+ 
+    expohedron = PBMexpohedron(pbm=gamma, relevance_vector=relevance_score, item_group_mask=item_group_masking)
+    expohedron.set_fairness(group_fairness)
     expohedron_basis = np.asarray([[1] * n_doc]).T
-    fairness_level_space = orthogonal_complement(item_group_masking, False)
-    fairness_level_direction = intersect_vector_space(fairness_level_space, expohedron_basis)
-    print(fairness_level_direction)
-    # optimal_fairness_direction = direction_projecion_on_subspace(relevance_score, np.asarray([[1], [1], [1]]).T)
-    # print(optimal_fairness_direction)
+    fairness_level_direction_space = orthogonal_complement(item_group_masking, False)
+    fairness_level_projection_space = intersect_vector_space(fairness_level_direction_space, expohedron_basis)
+    print(fairness_level_projection_space)
+    optimal_fairness_direction = direction_projecion_on_subspace(relevance_score, fairness_level_projection_space)
+    print(optimal_fairness_direction)
 
 
 if __name__ == "__main__":
