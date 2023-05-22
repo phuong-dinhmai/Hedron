@@ -32,20 +32,21 @@ def invert_permutation(permutation):
     return np.argsort(permutation)
 
 
-def majorized(a: np.array, b: np.array, tolerance: float = LOW_TOLERANCE) -> bool:
+def majorized(majorized_vector: np.array, majorizing_vector: np.array, tolerance: float = LOW_TOLERANCE) -> bool:
     """
         Checks whether `a` is majorized by `b`: a<b
 
-        :param a: The left hand side of the comparison a<b
-        :type a: numpy.array
-        :param b: The right hand side of the comparison a<b
-        :type b: numpy.array
+        :param majorized_vector: The left hand side of the comparison a<b
+        :type majorized_vector: numpy.array
+        :param majorizing_vector: The right hand side of the comparison a<b
+        :type majorizing_vector: numpy.array
         :param tolerance: the tolerance that is allowed
         :type tolerance: float
         :return: `True` if a < b, false otherwise
         :rtype: bool
     """
-    return np.all(np.cumsum(-np.sort(-a)) <= np.cumsum(-np.sort(-b)) + tolerance) and np.abs(np.sum(a) - np.sum(b)) < tolerance
+    return np.all(np.cumsum(-np.sort(-majorized_vector)) <= np.cumsum(-np.sort(-majorizing_vector)) + tolerance) \
+           and np.abs(np.sum(majorized_vector) - np.sum(majorizing_vector)) < tolerance
 
 
 def projection_matrix_on_subspace(U: np.ndarray):
@@ -112,13 +113,13 @@ def intersect_vector_space(orthogonal_space_1: np.ndarray, orthogonal_space_2: n
         :param orthogonal_space_1: Basis vectors of the first vector space (column is the basis vector)
         :param orthogonal_space_2: Basis vectors of the second vector space (column is the basis vector)
     """
-    solution_space = np.append(orthogonal_space_1, -orthogonal_space_2, axis=1)
-    null_space = orthogonal_complement(orth(solution_space))
-    return null_space
-    # return orthogonal_complement(orth(P_u @ P_v - np.identity(orthogonal_space_1.shape[0])))
+    P_u = projection_matrix_on_subspace(orthogonal_space_1)
+    P_v = projection_matrix_on_subspace(orthogonal_space_2)
+    return orthogonal_complement(orth(P_u @ P_v - np.identity(orthogonal_space_1.shape[0])))
 
 
-def find_face_intersection_bisection(gamma: np.ndarray, starting_point: np.ndarray, direction: np.ndarray, precision: float) -> np.ndarray:
+def find_face_intersection_bisection(gamma: np.ndarray, starting_point: np.ndarray,
+                                     direction: np.ndarray, precision: float = LOW_TOLERANCE) -> np.ndarray:
     """
         Executes a bisection search in the PBM-expohedron using the majorization criterion.
 

@@ -5,6 +5,7 @@ from scipy.linalg import orth
 
 from expohederon_group_fairness import PBMexpohedron
 from helpers import orthogonal_complement, direction_projection_on_subspace, intersect_vector_space
+from helpers import majorized, find_face_intersection_bisection
 
 
 def draw():
@@ -35,17 +36,17 @@ def draw():
 
 
 def toy_example():
-    # n_doc = 3
-    # n_group = 2
-    # gamma = np.asarray([4, 2, 1])
-    # group_fairness = np.asarray([3.5, 3.5])
-    # relevance_score = np.asarray([0.7, 0.5, 1])
-    # item_group_masking = np.asarray([[1, 0], [1, 0], [0, 1]])
+    n_doc = 3
+    n_group = 2
+    gamma = np.asarray([4, 2, 1])
+    group_fairness = np.asarray([3.5, 3.5])
+    relevance_score = np.asarray([0.7, 0.5, 1])
+    item_group_masking = np.asarray([[1, 0], [1, 0], [0, 1]])
 
-    n_doc = 10
-    n_group = 3
-    relevance_score = np.loadtxt("data/relevance_score.csv", delimiter=",").astype(np.double)
-    item_group_masking = np.loadtxt("data/item_group.csv", delimiter=",").astype(np.int32)
+    # n_doc = 10
+    # n_group = 3
+    # relevance_score = np.loadtxt("data/relevance_score.csv", delimiter=",").astype(np.double)
+    # item_group_masking = np.loadtxt("data/item_group.csv", delimiter=",").astype(np.int32)
     # np.random.seed(n_doc)
     # relevance_score = np.random.rand(n_doc)
     # np.savetxt("data/relevance_score.csv", relevance_score, delimiter=",")
@@ -55,20 +56,33 @@ def toy_example():
     #     j = random.randint(0, n_group-1)
     #     item_group_masking[i][j] = 1
     # np.savetxt("data/item_group.csv", item_group_masking, delimiter=",")
-    gamma = np.asarray([1/np.log2(2+1) for i in range(0, n_doc)])
-    group_fairness = np.sum(gamma) / n_group * np.asarray([1] * n_group)
+    # gamma = np.asarray([1/np.log2(2+1) for i in range(0, n_doc)])
+    # group_fairness = np.sum(gamma) / n_group * np.asarray([1] * n_group)
  
     expohedron = PBMexpohedron(pbm=gamma, relevance_vector=relevance_score, item_group_mask=item_group_masking)
     expohedron.set_fairness(group_fairness)
-    expohedron_basis = np.asarray([[1] * n_doc]).T
+    expohedron_basis = orthogonal_complement(np.asarray([[1] * n_doc]).T)
     fairness_level_direction_space = orthogonal_complement(item_group_masking, False)
     # print(fairness_level_direction_space)
+
     # Since the vector space is orthogonal with a subspace in the expohedron space
     # The intersection space will also be the projection space
-    fairness_level_projection_space = intersect_vector_space(fairness_level_direction_space, expohedron_basis)
+    fairness_level_projection_space = intersect_vector_space(item_group_masking, expohedron_basis)
     # print(fairness_level_projection_space)
+
     optimal_fairness_direction = direction_projection_on_subspace(relevance_score, fairness_level_projection_space)
     print(optimal_fairness_direction)
+
+    # Random point in fairness surface
+    group_size = item_group_masking.sum(axis=0)
+    initiate_fair_vector = (item_group_masking * (group_fairness / group_size)).sum(axis=1)
+    assert majorized(initiate_fair_vector, gamma), "Initiate point is not in the expohedron"
+    # print(initiate_fair_vector)
+
+    relevance_path_in_fair_level = direction_projection_on_subspace(relevance_score, fairness_level_direction_space)
+    # print(relevance_path_in_fair_level)
+    optimal_points = find_face_intersection_bisection(gamma, initiate_fair_vector, relevance_path_in_fair_level)
+    print(optimal_points)
 
 
 if __name__ == "__main__":
