@@ -45,6 +45,8 @@ def majorized(majorized_vector: np.array, majorizing_vector: np.array, tolerance
         :return: `True` if a < b, false otherwise
         :rtype: bool
     """
+    # print(np.cumsum(-np.sort(-majorized_vector)) <= np.cumsum(-np.sort(-majorizing_vector)) + tolerance)
+    # print(np.abs(np.sum(majorized_vector) - np.sum(majorizing_vector)))
     return np.all(np.cumsum(-np.sort(-majorized_vector)) <= np.cumsum(-np.sort(-majorizing_vector)) + tolerance) \
            and np.abs(np.sum(majorized_vector) - np.sum(majorizing_vector)) < tolerance
 
@@ -89,7 +91,7 @@ def orthogonal_complement(x: np.ndarray, normalize: bool = False, threshold: flo
     return oc
 
 
-def direction_projection_on_subspace(direction: np.ndarray, subspace_matrix: np.ndarray):
+def project_vector_on_subspace(direction: np.ndarray, subspace_matrix: np.ndarray):
     """
         Compute vector projection in any subspace when the orthorgonal vector of the subspace is known
 
@@ -103,6 +105,11 @@ def direction_projection_on_subspace(direction: np.ndarray, subspace_matrix: np.
     orthogonal_direction = projection_matrix_on_subspace(subspace_matrix) @ direction
     # Normalize vector
     return orthogonal_direction / np.linalg.norm(orthogonal_direction)
+
+
+def project_point_onto_plane(point: np.ndarray, A: np.ndarray, b: np.ndarray):
+    para = (A.T @ point - b) / np.sum(A**2, axis=0)
+    return point - para @ A.T
 
 
 def intersect_vector_space(orthogonal_space_1: np.ndarray, orthogonal_space_2: np.ndarray):
