@@ -8,6 +8,7 @@ from evaluation import evaluate_probabilty
 parser = argparse.ArgumentParser()
 parser.add_argument("-alpha", type=float, help="Trade off hyperparameter between utilities and fairness", default=0.5)
 
+
 class QP:
     relevance_score: np.array 
     item_list: np.array
@@ -34,7 +35,7 @@ class QP:
         self.constraints.append(cp.sum(self.ranking_probability, axis=0) == np.ones((n_doc)))
         self.constraints.append(cp.sum(self.ranking_probability, axis=1) == np.ones((n_doc)))
 
-        self.obj_func = cp.Maximize(self.alpha * (relevance_score.T @ self.ranking_probability) @ self.gamma  \
+        self.obj_func = cp.Maximize(self.alpha * (relevance_score.T @ self.ranking_probability) @ self.gamma\
                         - (1-self.alpha) * cp.sum((self.ranking_probability @ self.gamma @ self.item_list - self.fair_exposure) ** 2))
 
     def optimize(self):
@@ -44,6 +45,7 @@ class QP:
         # print("optimal value", prob.value)
         # print("optimal var", self.ranking_probability.value)
         return prob.status, self.ranking_probability.value
+
 
 if __name__ == "__main__":
     # n_doc = 100
@@ -68,7 +70,7 @@ if __name__ == "__main__":
     pareto_front = []
     alpha_arr = np.arange(0, 11) / 10
     for alpha in alpha_arr:
-        solver = QP(relevance_score=relevance_score.reshape((100, 1)), item_list=item_list, alpha=alpha)
+        solver = QP(relevance_score=relevance_score.reshape((n_doc, 1)), item_list=item_list, alpha=alpha)
         status, result = solver.optimize()
 
         if status == cp.OPTIMAL:
@@ -77,6 +79,6 @@ if __name__ == "__main__":
     for point in pareto_set:
         objecties = evaluate_probabilty(point, relevance_score, item_list)
         pareto_front.append(objecties)
-    print (pareto_front)
+    print(pareto_front)
 
 
