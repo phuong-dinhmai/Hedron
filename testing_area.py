@@ -5,7 +5,7 @@ import time
 
 from expohederon_group_fairness import PBMexpohedron
 from helpers import orthogonal_complement, project_vector_on_subspace, intersect_vector_space
-from helpers import majorized, find_face_intersection_bisection, project_point_onto_plane
+from helpers import majorized, find_face_intersection_bisection, project_point_onto_plane, invert_permutation
 from expohedron_face import identify_face, find_face_subspace_without_parent
 
 from pareto import caratheodory_decomposition_pbm_gls
@@ -13,35 +13,20 @@ from pareto import caratheodory_decomposition_pbm_gls
 from evaluation import evaluate_probabilty
 
 
-def draw():
-    # a = ((14.269311137873268, 1.187725136792305), (17.140071286605405, 1.1934830225907016),
-    #      (17.140856954827676, 1.2004411126975776),
-    #      (17.140634281456983, 1.2095967259609504), (17.141263990381397, 1.2222150136722743),
-    #      (17.142658024163698, 1.2402153675248115),
-    #      (17.143892656991724, 1.2672272378109188), (17.145942914339493, 1.3109890544499345),
-    #      (17.149803488278486, 1.4028168916716548),
-    #      (17.15684902996225, 1.6314599377584822), (17.173555531653545, 3.9043156468687505))
-    # b = [[14.385308417564582, 1.2092578403993637], [14.385421466188795, 1.2095057377990637],
-    #      [14.33582183429067, 1.7839697210619498],
-    #      [14.385299104916934, 1.2095057377990603], [14.386379195848214, 1.2095952191041774],
-    #      [14.385905566552244, 1.2130189891963277],
-    #      [14.386134089154195, 1.2177653081872186], [14.385636856853408, 1.2094263595077372],
-    #      [14.385441955863373, 1.2095207021174028],
-    #      [14.385276899449897, 1.2092477143885902], [14.38629857351739, 1.20926506836034],
-    #      [14.385507477130469, 1.2092559874410718]]
-    b = [(2.6966313608076025, 1.995191503970862), (3.1832411249309946, 1.969490726810317), (3.1858243388083007, 1.9376926384690274), (3.189156026734112, 1.8973418881711135), (3.1935863938005546, 1.8444679636133055), (3.1997787007171956, 1.7722041903247001), (3.2090932487979518, 1.6676899246435075), (3.224589790500145, 1.5038525244425816), (3.252712761672915, 1.2265369510285211), (3.3056907393352017, 0.677086966480708), (3.351879138281738, 0.10780052228086485)]
-    a = [[1.88448849569545, 1.4791141972893971e-31], [1.977297098869416, 0.035992689711478065], [2.0701057020426776, 0.14397075884591234], [2.162914305216644, 0.32393420740330287], [2.208146403271169, 0.5758830353836503], [2.1928553755149753, 0.8998172427869523], [2.1775643477580773, 1.2957368296132121]]
-
-    # pareto_set = [[0.4104583 , 0.45802261, 0.56695921, 0.40645616, 0.54057212,
-    #    0.49192265, 0.48953797, 0.40854049, 0.48202502, 0.28906483], [0.4629194 , 0.41056099, 0.56657536, 0.4571877 , 0.5316349 ,
-    #    0.4619612 , 0.45569595, 0.46017279, 0.44778623, 0.28906483], [0.51538049, 0.36309938, 0.56619151, 0.50791923, 0.52269768,
-    #    0.43199975, 0.42185394, 0.51180509, 0.41354745, 0.28906483], [0.56784158, 0.31563777, 0.56580766, 0.55865077, 0.51376046,
-    #    0.4020383 , 0.38801193, 0.56343739, 0.37930866, 0.28906483], [0.60610169, 0.28906483, 0.5377078 , 0.59696698, 0.48888046,
-    #    0.37784021, 0.36099725, 0.60172438, 0.3552493 , 0.32902645], [0.62629641, 0.28906483, 0.4743498 , 0.61948936, 0.44371931,
-    #    0.3609738 , 0.34266777, 0.6230345 , 0.3441394 , 0.41982415], [0.64649113, 0.28906483, 0.41099179, 0.64201175, 0.39855817,
-    #    0.34410739, 0.3243383 , 0.64434463, 0.3330295 , 0.51062185]]
+def draw(a):
+    b = [(2.696631360807602, 8.38164711797325e-31), (2.9982496632271998, 0.00013244303963676644), (3.003844880196346, 0.0005902582028100382), 
+    (3.0100993308470283, 0.0014888919836944163), (3.0171266843390243, 0.002988071026721005), (3.025086123918304, 0.005311710621510635), 
+    (3.034195204880937, 0.008778863796807335), (3.0446932236007336, 0.013857740478585075), (3.0569748084539037, 0.02124722789016048), 
+    (3.071485498368487, 0.03201027158876389), (3.08886268589049, 0.047812919881222736), (3.1101334292834264, 0.07142969890449904), 
+    (3.1366609382818487, 0.10758952581778192), (3.1708492136243134, 0.16490729184319128), (3.2115036314778904, 0.24998261010097175), 
+    (3.2460615055863933, 0.3371326852938169), (3.285034199992179, 0.4766726527435362), (3.318023563914365, 0.6293974870927266), 
+    (3.3460413309433554, 0.8216059374545983), (3.347308401590674, 0.8393504613130608), (3.35187913828159, 1.1371531328662687)]
+    # a = [[2.888080709604799, 4.437342591868191e-31], [2.9442077897492993, 0.01737058163979818], [3.000334869894391, 0.069482326559193], 
+    # [3.0564619500394827, 0.15633523475818448], [3.1125890301845742, 0.2779293062367726], [3.1687161103296657, 0.43426454099495815], 
+    # [3.224843190474757, 0.6253409390327388], [3.266340159865052, 0.851158500350116], [3.3518791390065936, 1.1371531281828773]]
     a = np.asarray(a)
     b = np.asarray(b)
+    b = b[b[:, 1].argsort()]
 
     plt.plot(a[:, 1], a[:, 0], label="Hedron")
     plt.plot(b[:, 1], b[:, 0], label="QP")
@@ -50,7 +35,7 @@ def draw():
     plt.legend(loc='upper left')
     plt.show()
 
-
+# TODO: check this function - the while loop never pass the second iteration
 def optimal_utility_point_in_fair_level(start_point: np.ndarray, basis_vectors: np.ndarray,
                                         direction: np.ndarray, gamma: np.ndarray):
     current_direction = project_vector_on_subspace(direction, basis_vectors)
@@ -84,8 +69,9 @@ def toy_example():
     n_group = 3
     relevance_score = np.loadtxt("data/relevance_score.csv", delimiter=",").astype(np.double)
     item_group_masking = np.loadtxt("data/item_group.csv", delimiter=",").astype(np.int32)
-    gamma = np.asarray([1/np.log2(2+i) for i in range(0, n_doc)])
-    group_fairness = np.sum(gamma) / n_group * np.asarray([1] * n_group)
+    gamma = 1 / np.log(np.arange(0, n_doc) + 2)
+    group_size = item_group_masking.sum(axis=0)
+    group_fairness = group_size / np.sum(group_size) * np.sum(gamma)
     # np.random.seed(n_doc)
     # relevance_score = np.random.rand(n_doc)
     # np.savetxt("data/relevance_score.csv", relevance_score, delimiter=",")
@@ -120,14 +106,16 @@ def toy_example():
                                                        relevance_score, gamma)
     pareto_set.append(pareto_point)
 
-    step = 0.1
+    step = 0.01
     while majorized(initiate_fair_point + step * optimal_fairness_direction, gamma):
         initiate_fair_point = initiate_fair_point + step * optimal_fairness_direction
         pareto_point = optimal_utility_point_in_fair_level(initiate_fair_point, fairness_level_basis_vector,
                                                            relevance_score, gamma)
+        assert majorized(pareto_point, gamma), "Something went wrong with the projection, new point is out of the hedron."
         pareto_set.append(pareto_point)
 
-    print(pareto_set)
+    pareto_set.append(gamma[invert_permutation(np.argsort(-relevance_score))])
+    # print(pareto_set)
 
     objectives = []
     for exposure in pareto_set:
@@ -136,8 +124,9 @@ def toy_example():
 
         objectives.append([user_utilities, unfairness])
     print(objectives)
+    return objectives
 
 
 if __name__ == "__main__":
-    # toy_example()
-    draw()
+    objectives = toy_example()
+    draw(objectives)

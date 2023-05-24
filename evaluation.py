@@ -4,14 +4,16 @@ from utils import compute_unfairness
 
 
 def evaluate_probabilty(ranking_probability: np.array, relevance_score: np.array, item_list: np.array):
-    n_doc = relevance_score.shape[0]
+    n_doc, n_group = item_list.shape
     gamma = 1 / np.log(np.arange(0, n_doc) + 2) #the DCG exposure
+    gamma = gamma.reshape([n_doc, 1])
 
-    group_size = relevance_score @ item_list
+    group_size = item_list.sum(axis=0)
     fair_exposure = group_size / np.sum(group_size) * np.sum(gamma)
+    fair_exposure = fair_exposure.reshape([n_group, 1])
     
-    user_utilities = np.sum((relevance_score.T @ ranking_probability) * gamma)
-    unfairness = np.sum((ranking_probability @ gamma @ item_list - fair_exposure) ** 2)
+    user_utilities = np.sum(relevance_score.T @ ranking_probability @ gamma)
+    unfairness = np.sum((item_list.T @ (ranking_probability @ gamma) - fair_exposure) ** 2)
     return user_utilities, unfairness
 
 

@@ -20,12 +20,13 @@ class QP:
         self.item_list = item_list
         self.alpha = alpha
         
-        n_doc = relevance_score.shape[0]
+        n_doc, n_group = item_list.shape
         self.gamma = 1 / np.log(np.arange(0, n_doc) + 2) #the DCG exposure
-        self.gamma.reshape((n_doc, 1))
+        self.gamma = self.gamma.reshape([n_doc, 1])
 
         group_size = item_list.sum(axis=0)
         self.fair_exposure = group_size / np.sum(group_size) * np.sum(self.gamma)
+        self.fair_exposure = self.fair_exposure.reshape([n_group, 1])
         # print(self.fair_exposure)
 
         # Birkhoff polotype
@@ -35,8 +36,10 @@ class QP:
         self.constraints.append(cp.sum(self.ranking_probability, axis=0) == np.ones((n_doc)))
         self.constraints.append(cp.sum(self.ranking_probability, axis=1) == np.ones((n_doc)))
 
-        self.obj_func = cp.Maximize(self.alpha * (relevance_score.T @ self.ranking_probability) @ self.gamma\
-                        - (1-self.alpha) * cp.sum((self.ranking_probability @ self.gamma @ self.item_list - self.fair_exposure) ** 2))
+        utilities = cp.sum(relevance_score.T @ self.ranking_probability @ self.gamma)
+        group_exposure = self.item_list.T @ (self.ranking_probability @ self.gamma)
+
+        self.obj_func = cp.Maximize(self.alpha * utilities - (1-self.alpha) * cp.sum((group_exposure - self.fair_exposure) ** 2))
 
     def optimize(self):
         prob = cp.Problem(self.obj_func, self.constraints)
@@ -68,9 +71,9 @@ if __name__ == "__main__":
 
     pareto_set = []
     pareto_front = []
-    alpha_arr = np.arange(0, 11) / 10
+    alpha_arr = np.arange(0, 21) / 20
     for alpha in alpha_arr:
-        solver = QP(relevance_score=relevance_score.reshape((n_doc, 1)), item_list=item_list, alpha=alpha)
+        solver = QP(relevance_score=relevance_score.reshape([n_doc, 1]), item_list=item_list, alpha=alpha)
         status, result = solver.optimize()
 
         if status == cp.OPTIMAL:
