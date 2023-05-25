@@ -4,6 +4,23 @@ from scipy.linalg import orth
 LOW_TOLERANCE = 1e-12
 
 
+def check_orthogonal_and_belonging_vector(vector: np.ndarray, basis_space: np.ndarray):
+    """
+        Checks if a vector is orthogonal with vector space
+    :param vector: a vector is to be checked
+    :type vector: np.ndarray
+    :param basis_space: The vector space need to check
+    :type basis_space: np.ndarray
+    :return: True if they are orthogonal, False otherwise
+    :rtype: bool
+    """
+    for orth_vector in basis_space.T:
+        if np.dot(vector, orth_vector) > LOW_TOLERANCE:
+            return False
+    m_vector = vector.reshape((vector.shape[0], 1))
+    return np.linalg.matrix_rank(np.concatenate((basis_space, m_vector), axis=1)) == basis_space.shape[0]
+
+
 def is_ranking(ranking: np.ndarray, size: int = None):
     """
         Checks if `ranking` is a ranking, i.e. performs simple asserts to check if `ranking` is a valid ranking
@@ -108,6 +125,18 @@ def project_vector_on_subspace(direction: np.ndarray, subspace_matrix: np.ndarra
 
 
 def project_point_onto_plane(point: np.ndarray, A: np.ndarray, b: np.ndarray):
+    """
+        Compute point projection in any subspace when the multiply matrix and constants is know
+
+        :param point: the coordination of the point need to find the projection 
+        :type point: numpy.array
+        :param A: the matrix of othorgonal vector represent the subspace (each row is an vector)
+        :type A: numpy.ndarray
+        :param b: the matrix of othorgonal vector represent the subspace (each row is an vector)
+        :type b: numpy.ndarray
+        :return: The projection of the point in the subspace Ax=b
+        :rtype: numpy.ndarray (1D)   
+    """
     para = (A.T @ point - b) / np.sum(A**2, axis=0)
     return point - para @ A.T
 

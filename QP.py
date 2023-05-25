@@ -50,23 +50,7 @@ class QP:
         return prob.status, self.ranking_probability.value
 
 
-if __name__ == "__main__":
-    # n_doc = 100
-    # n_group = 5
-    # np.random.seed(n_doc)
-    # relevance_score = np.random.rand(n_doc)
-    # np.savetxt("data/relevance_score.csv", relevance_score, delimiter=",")
-
-    # item_list = np.zeros((n_doc, n_group))
-    # for i in range(n_doc):
-    #     j = random.randint(0, n_group-1)
-    #     item_list[i][j] = 1
-
-    # np.savetxt("data/item_group.csv", item_list, delimiter=",")
-
-    relevance_score = np.loadtxt("data/relevance_score.csv", delimiter=",").astype(np.double)
-    item_list = np.loadtxt("data/item_group.csv", delimiter=",").astype(np.int32)
-
+def experiment(relevance_score, item_list):
     n_doc = relevance_score.shape[0]
 
     pareto_set = []
@@ -83,5 +67,27 @@ if __name__ == "__main__":
         objecties = evaluate_probabilty(point, relevance_score, item_list)
         pareto_front.append(objecties)
     print(pareto_front)
+    return pareto_front
+
+if __name__ == "__main__":
+    n_doc = 100
+    n_group = 5
+    np.random.seed(n_doc)
+    relevance_score = np.random.rand(n_doc)
+    np.savetxt("data/relevance_score.csv", relevance_score, delimiter=",")
+
+    item_list = np.zeros((n_doc, n_group))
+    for i in range(n_doc):
+        j = random.randint(0, n_group-1)
+        item_list[i][j] = 1
+
+    np.savetxt("data/item_group.csv", item_list, delimiter=",")
+
+    # relevance_score = np.loadtxt("data/relevance_score.csv", delimiter=",").astype(np.double)
+    # item_list = np.loadtxt("data/item_group.csv", delimiter=",").astype(np.int32)
+
+    experiment(relevance_score, item_list)
+
+    
 
 
