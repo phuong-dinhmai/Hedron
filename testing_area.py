@@ -114,21 +114,21 @@ def load_data():
     # relevance_score = np.asarray([0.7, 0.8, 1])
     # item_group_masking = np.asarray([[1, 0], [1, 0], [0, 1]])
 
-    # relevance_score = np.loadtxt("data/relevance_score.csv", delimiter=",").astype(np.double)
-    # item_group_masking = np.loadtxt("data/item_group.csv", delimiter=",").astype(np.int32)
+    relevance_score = np.loadtxt("data_error/relevance_score.csv", delimiter=",").astype(np.double)
+    item_group_masking = np.loadtxt("data_error/item_group.csv", delimiter=",").astype(np.int32)
 
     n_doc = 20
     n_group = 2
 
-    np.random.seed(n_doc)
-    relevance_score = np.random.rand(n_doc)
-    np.savetxt("data_error/relevance_score.csv", relevance_score, delimiter=",")
-    
-    item_group_masking = np.zeros((n_doc, n_group))
-    for i in range(n_doc):
-        j = random.randint(0, n_group-1)
-        item_group_masking[i][j] = 1
-    np.savetxt("data_error/item_group.csv", item_group_masking, delimiter=",")
+    # np.random.seed(n_doc)
+    # relevance_score = np.random.rand(n_doc)
+    # np.savetxt("data_error/relevance_score.csv", relevance_score, delimiter=",")
+    #
+    # item_group_masking = np.zeros((n_doc, n_group))
+    # for i in range(n_doc):
+    #     j = np.random.randint(n_group, size=1)
+    #     item_group_masking[i][j[0]] = 1
+    # np.savetxt("data_error/item_group.csv", item_group_masking, delimiter=",")
 
     gamma = 1 / np.log(np.arange(0, n_doc) + 2)
     group_size = item_group_masking.sum(axis=0)
