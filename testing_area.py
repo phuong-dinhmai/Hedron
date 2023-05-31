@@ -77,7 +77,6 @@ def example(relevance_score: np.ndarray, item_group_masking: np.ndarray, group_f
     # print(fairness_level_projection_space)
 
     optimal_fairness_direction = project_vector_on_subspace(relevance_score, fairness_level_projection_space)
-    # optimal_fairness_direction = optimal_fairness_direction + fairness_level_projection_space[:, 0]
     print("Optimal_fairness_direction")
 
     # Random point in fairness surface
@@ -128,7 +127,7 @@ def load_data():
     item_group_masking = np.loadtxt("data_error/item_group.csv", delimiter=",").astype(np.int32)
     n_doc = item_group_masking.shape[0]
 
-    # n_doc = 8
+    # n_doc = 40
     # n_group = 3
     #
     # np.random.seed(n_doc*2)
