@@ -4,11 +4,11 @@ import time
 from scipy.linalg import orth
 import random
 
-from helpers import orthogonal_complement, project_vector_on_subspace, intersect_vector_space, check_orthogonal_and_belonging_vector
+from helpers import orthogonal_complement, project_vector_on_subspace, intersect_vector_space, check_spanned_vector
 from helpers import majorized, find_face_intersection_bisection, project_point_onto_plane, invert_permutation
 from expohedron_face import identify_face, find_face_subspace_without_parent
 
-from pareto import caratheodory_decomposition_pbm_gls
+from expohedron import caratheodory_decomposition_pbm_gls
 from evaluation import evaluate_probabilty
 
 import QP
@@ -24,34 +24,42 @@ def draw(a, b):
     plt.plot(b[:, 1], b[:, 0], label="QP")
     plt.ylabel("User utility")
     plt.xlabel("Unfairness")
-    plt.legend(loc='upper left')
+    plt.legend(loc='lower right')
     plt.show()
 
 
 def optimal_utility_point_in_fair_level(start_point: np.ndarray, basis_vectors: np.ndarray,
                                         direction: np.ndarray, gamma: np.ndarray):
-    current_direction = project_vector_on_subspace(direction, basis_vectors)
+    current_direction = direction
     current_point = start_point
-    previous_dim = basis_vectors.shape[1]
+    previous_face = identify_face(gamma, current_point)
+    previous_dim = previous_face.dim
 
     while True:
         current_point = find_face_intersection_bisection(gamma, current_point, current_direction)
         current_face = identify_face(gamma, current_point)
+
+        if not previous_face.dim >= current_face.dim:
+            raise Exception("if not face.dim < current_dim", "A precision error is likely to have occurred")
+
         pareto_face_basis_matrix = find_face_subspace_without_parent(current_face)
-        face_basis_vectors = orthogonal_complement(pareto_face_basis_matrix)
+        face_basis_vectors = orthogonal_complement(pareto_face_basis_matrix, True)
+
         current_search_faces = intersect_vector_space(face_basis_vectors, basis_vectors)
-        current_search_faces[np.abs(current_search_faces) < 1e-13] = 0
+        # current_search_faces[np.abs(current_search_faces) < 1e-13] = 0
 
-        # TODO: why the intersection result empty vector space?
-        if (current_search_faces.shape[1] == 0):
-            break
-        current_search_faces = orth(current_search_faces)
-        if current_search_faces.shape[1] == previous_dim:
+        if current_search_faces.shape[1] == 0:
             break
 
-        previous_dim = current_search_faces.shape[1]
+        # # TODO: error here
+        if current_face.dim == previous_dim:
+            print(current_face.dim)
+            break
+
+        previous_dim = current_face.dim
+        previous_face = current_face
         current_direction = project_vector_on_subspace(current_direction, current_search_faces)
-        current_direction[np.abs(current_direction) < 1e-13] = 0
+        # current_direction[np.abs(current_direction) < 1e-13] = 0
 
     return current_point
 
@@ -60,7 +68,7 @@ def example(relevance_score: np.ndarray, item_group_masking: np.ndarray, group_f
     n_doc = item_group_masking.shape[0]
 
     expohedron_basis = orthogonal_complement(np.asarray([[1] * n_doc]).T)
-    fairness_level_basis_vector = orthogonal_complement(item_group_masking, False)
+    fairness_level_basis_vector = orthogonal_complement(item_group_masking, True)
     print("Fairness_level_direction_space")
 
     # Since the vector space is orthogonal with a subspace in the expohedron space
@@ -69,6 +77,7 @@ def example(relevance_score: np.ndarray, item_group_masking: np.ndarray, group_f
     # print(fairness_level_projection_space)
 
     optimal_fairness_direction = project_vector_on_subspace(relevance_score, fairness_level_projection_space)
+    # optimal_fairness_direction = optimal_fairness_direction + fairness_level_projection_space[:, 0]
     print("Optimal_fairness_direction")
 
     # Random point in fairness surface
@@ -77,20 +86,23 @@ def example(relevance_score: np.ndarray, item_group_masking: np.ndarray, group_f
     initiate_fair_point = project_point_onto_plane(initiate_fair_point, item_group_masking, group_fairness)
     assert majorized(initiate_fair_point, gamma), "Initiate point is not in the expohedron"
 
+    direction = project_vector_on_subspace(relevance_score, fairness_level_basis_vector)
+
     pareto_set = []
     pareto_point = optimal_utility_point_in_fair_level(initiate_fair_point, fairness_level_basis_vector,
-                                                       relevance_score, gamma)
+                                                       direction, gamma)
     pareto_set.append(pareto_point)
 
-    # raise Exception("test")
-
     print("Start search for pareto front")
-    step = 0.1
-    while majorized(initiate_fair_point + step * optimal_fairness_direction, gamma):
+    step = 0.01
+    while True:
         initiate_fair_point = initiate_fair_point + step * optimal_fairness_direction
+        initiate_fair_point = initiate_fair_point / np.sum(initiate_fair_point) * np.sum(gamma)
+        if not majorized(initiate_fair_point, gamma):
+            break
         pareto_point = optimal_utility_point_in_fair_level(initiate_fair_point, fairness_level_basis_vector,
-                                                           relevance_score, gamma)
-        assert majorized(pareto_point, gamma), "Something went wrong with the projection, new point is out of the hedron."
+                                                           direction, gamma)
+        # assert majorized(pareto_point, gamma), "Projection went wrong, new point is out of the hedron."
         pareto_set.append(pareto_point)
 
     pareto_set.append(gamma[invert_permutation(np.argsort(-relevance_score))])
@@ -109,26 +121,25 @@ def example(relevance_score: np.ndarray, item_group_masking: np.ndarray, group_f
 def load_data():
     # n_doc = 3
     # n_group = 2
-    # gamma = np.asarray([4, 2, 1])
-    # group_fairness = np.asarray([3.5, 3.5])
     # relevance_score = np.asarray([0.7, 0.8, 1])
-    # item_group_masking = np.asarray([[1, 0], [1, 0], [0, 1]])
+    # item_group_masking = np.asarray([[0, 1], [1, 0], [1, 0]])
 
     relevance_score = np.loadtxt("data_error/relevance_score.csv", delimiter=",").astype(np.double)
     item_group_masking = np.loadtxt("data_error/item_group.csv", delimiter=",").astype(np.int32)
+    n_doc = item_group_masking.shape[0]
 
-    n_doc = 20
-    n_group = 2
-
-    # np.random.seed(n_doc)
+    # n_doc = 8
+    # n_group = 3
+    #
+    # np.random.seed(n_doc*2)
     # relevance_score = np.random.rand(n_doc)
-    # np.savetxt("data_error/relevance_score.csv", relevance_score, delimiter=",")
+    # # np.savetxt("data_error/relevance_score.csv", relevance_score, delimiter=",")
     #
     # item_group_masking = np.zeros((n_doc, n_group))
     # for i in range(n_doc):
     #     j = np.random.randint(n_group, size=1)
     #     item_group_masking[i][j[0]] = 1
-    # np.savetxt("data_error/item_group.csv", item_group_masking, delimiter=",")
+    # # np.savetxt("data_error/item_group.csv", item_group_masking, delimiter=",")
 
     gamma = 1 / np.log(np.arange(0, n_doc) + 2)
     group_size = item_group_masking.sum(axis=0)
@@ -139,16 +150,16 @@ def load_data():
 
 if __name__ == "__main__":
     print("Load data")
-    relevance_score, item_group, group_fairness, gamma = load_data()
+    _relevance_score, item_group, _group_fairness, _gamma = load_data()
     print("Start hedron experiment:")
     hedron_start = time.time()
-    objectives = example(relevance_score, item_group, group_fairness, gamma)
+    objs = example(_relevance_score, item_group, _group_fairness, _gamma)
     hedron_end = time.time()
     print("Start QP experiment:")
     qp_start = time.time()
-    base_qp = QP.experiment(relevance_score, item_group)
+    base_qp = QP.experiment(_relevance_score, item_group)
     qp_end = time.time()
     print("Done")
-    print(hedron_end - hedron_start)
-    print(qp_end - qp_start)
-    draw(objectives, base_qp)
+    print((hedron_end - hedron_start) / len(objs))
+    print((qp_end - qp_start) / len(base_qp))
+    draw(objs, base_qp)

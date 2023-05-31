@@ -2,9 +2,10 @@ import numpy as np
 from scipy.linalg import orth
 
 LOW_TOLERANCE = 1e-12
+HIGH_TOLERANCE = 1e-10
 
 
-def check_orthogonal_and_belonging_vector(vector: np.ndarray, basis_space: np.ndarray):
+def check_orthogonal_vector(vector: np.ndarray, basis_space: np.ndarray):
     """
         Checks if a vector is orthogonal with vector space
     :param vector: a vector is to be checked
@@ -17,8 +18,21 @@ def check_orthogonal_and_belonging_vector(vector: np.ndarray, basis_space: np.nd
     for orth_vector in basis_space.T:
         if np.dot(vector, orth_vector) > LOW_TOLERANCE:
             return False
+    return True
+
+
+def check_spanned_vector(vector: np.ndarray, basis_space: np.ndarray):
+    """
+        Checks if a vector is orthogonal with vector space
+    :param vector: a vector is to be checked
+    :type vector: np.ndarray
+    :param basis_space: The vector space need to check
+    :type basis_space: np.ndarray
+    :return: True if the vector belongs to the span of the basis vector space, False otherwise
+    :rtype: bool
+    """
     m_vector = vector.reshape((vector.shape[0], 1))
-    return np.linalg.matrix_rank(np.concatenate((basis_space, m_vector), axis=1)) == basis_space.shape[0]
+    return np.linalg.matrix_rank(np.concatenate((basis_space, m_vector), axis=1)) == np.linalg.matrix_rank(basis_space)
 
 
 def is_ranking(ranking: np.ndarray, size: int = None):
@@ -72,8 +86,7 @@ def projection_matrix_on_subspace(U: np.ndarray):
     """
         Projection matrices onto the two sub-spaces spanned by the columns of U
     """
-    matrix = U @ np.linalg.inv(U.T @ U) @ U.T
-    return matrix
+    return U @ np.linalg.inv(U.T @ U) @ U.T
 
 
 def orthogonal_complement(x: np.ndarray, normalize: bool = False, threshold: float = LOW_TOLERANCE):
@@ -85,8 +98,8 @@ def orthogonal_complement(x: np.ndarray, normalize: bool = False, threshold: flo
         :type x: numpy.ndarray
         :param normalize: equals True if the orthogonal vectors of complement need to standardize.
         :type normalize: bool
-        :param tolerance: the tolerance that is allowed
-        :type tolerance: float
+        :param threshold: the tolerance that is allowed
+        :type threshold: float
         :return: List of orthogonal vector of the complement if have, None otherwise
         :rtype: np.ndarray
     """
@@ -103,8 +116,7 @@ def orthogonal_complement(x: np.ndarray, normalize: bool = False, threshold: flo
     oc = s[:, rank:]
 
     if normalize:
-        k_oc = oc.shape[1]
-        oc = oc.dot(np.linalg.inv(oc[:k_oc, :]))
+        oc = oc / np.sum(oc**2, axis=0)
     return oc
 
 
@@ -119,9 +131,11 @@ def project_vector_on_subspace(direction: np.ndarray, subspace_matrix: np.ndarra
         :return: The projection of the direction vector in the subspace 
         :rtype: numpy.ndarray (1D)   
     """
-    orthogonal_direction = projection_matrix_on_subspace(subspace_matrix) @ direction
-    # Normalize vector
-    return orthogonal_direction / np.linalg.norm(orthogonal_direction)
+    res = np.zeros(direction.shape)
+    for orth_vector in subspace_matrix.T:
+        param = np.dot(direction, orth_vector) / np.dot(orth_vector, orth_vector)
+        res += param * orth_vector
+    return res
 
 
 def project_point_onto_plane(point: np.ndarray, A: np.ndarray, b: np.ndarray):
@@ -130,21 +144,20 @@ def project_point_onto_plane(point: np.ndarray, A: np.ndarray, b: np.ndarray):
 
         :param point: the coordination of the point need to find the projection 
         :type point: numpy.array
-        :param A: the matrix of othorgonal vector represent the subspace (each row is an vector)
+        :param A: the matrix of orthogonal vector represent the subspace (each row is an vector)
         :type A: numpy.ndarray
-        :param b: the matrix of othorgonal vector represent the subspace (each row is an vector)
+        :param b: the matrix of orthogonal vector represent the subspace (each row is an vector)
         :type b: numpy.ndarray
         :return: The projection of the point in the subspace Ax=b
         :rtype: numpy.ndarray (1D)   
     """
-    para = (A.T @ point - b) / np.sum(A**2, axis=0)
-    return point - para @ A.T
+    return point - (A.T @ point - b) @ A.T
 
 
 def intersect_vector_space(orthogonal_space_1: np.ndarray, orthogonal_space_2: np.ndarray):
     """
         Return basis vectors of intersection of 2 vector space
-        (solution find inhttps://math.stackexchange.com/questions/25371/how-to-find-a-basis-for-the-intersection-of-two-vector-spaces-in-mathbbrn)
+        (solution find in https://math.stackexchange.com/questions/25371/how-to-find-a-basis-for-the-intersection-of-two-vector-spaces-in-mathbbrn)
 
         :param orthogonal_space_1: Basis vectors of the first vector space (column is the basis vector)
         :param orthogonal_space_2: Basis vectors of the second vector space (column is the basis vector)
@@ -180,10 +193,11 @@ def find_face_intersection_bisection(gamma: np.ndarray, starting_point: np.ndarr
     # direction = direction / np.linalg.norm(direction)  # normalize direction
     # 1. Find upper and lower bound
     k = 1
-    while majorized((starting_point + k*direction) / np.sum((starting_point + k*direction)) * np.sum(gamma), gamma):  
+    while majorized((starting_point + k*direction) / np.sum((starting_point + k*direction)) * np.sum(gamma), gamma):
         # We make sure the tested point is in the hyperplane containing the expohedron
         # The division phase is for point projection to expohedron
         k *= 2
+
     upper_bound = (starting_point + k*direction) / np.sum((starting_point + k*direction)) * np.sum(gamma)
     lower_bound = starting_point
 

@@ -33,8 +33,8 @@ class QP:
         self.ranking_probability = cp.Variable((n_doc, n_doc))
 
         self.constraints = [0 <= self.ranking_probability, self.ranking_probability <= 1]
-        self.constraints.append(cp.sum(self.ranking_probability, axis=0) == np.ones((n_doc)))
-        self.constraints.append(cp.sum(self.ranking_probability, axis=1) == np.ones((n_doc)))
+        self.constraints.append(cp.sum(self.ranking_probability, axis=0) == np.ones(n_doc))
+        self.constraints.append(cp.sum(self.ranking_probability, axis=1) == np.ones(n_doc))
 
         utilities = cp.sum(relevance_score.T @ self.ranking_probability @ self.gamma)
         group_exposure = self.item_list.T @ (self.ranking_probability @ self.gamma)
@@ -68,6 +68,7 @@ def experiment(relevance_score, item_list):
         pareto_front.append(objecties)
     print(pareto_front)
     return pareto_front
+
 
 if __name__ == "__main__":
     n_doc = 100
