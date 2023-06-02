@@ -67,7 +67,7 @@ def optimal_utility_point_in_fair_level(start_point: np.ndarray, basis_vectors: 
 def example(relevance_score: np.ndarray, item_group_masking: np.ndarray, group_fairness: np.ndarray, gamma: np.ndarray):
     n_doc = item_group_masking.shape[0]
 
-    expohedron_basis = orthogonal_complement(np.asarray([[1] * n_doc]).T)
+    expohedron_basis = orthogonal_complement(np.asarray([[1.0] * n_doc]).T)
     fairness_level_basis_vector = orthogonal_complement(item_group_masking, True)
     print("Fairness_level_direction_space")
 

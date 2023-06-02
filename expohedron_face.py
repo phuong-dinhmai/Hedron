@@ -74,6 +74,8 @@ def find_face_subspace_without_parent(face: Face) -> np.ndarray:
             psi = s1 / s2
         nu[i+1:n] = -psi
         A[j, :] = nu[invert_permutation(face.zone)]
+    # result = orth(A.T)
+    # return result / np.sum(result**2, axis=0)
     return orth(A.T)
 
 
