@@ -89,15 +89,13 @@ def projection_matrix_on_subspace(U: np.ndarray):
     return U @ np.linalg.inv(U.T @ U) @ U.T
 
 
-def orthogonal_complement(x: np.ndarray, normalize: bool = False, threshold: float = LOW_TOLERANCE):
+def orthogonal_complement(x: np.ndarray, threshold: float = LOW_TOLERANCE):
     """
         Compute orthogonal complement of a matrix
 
         This works along axis zero, i.e. rank == column rank, or number of rows > column rank otherwise orthogonal complement is empty
         :param x: the matrix need to find the orthogonal complement
         :type x: numpy.ndarray
-        :param normalize: equals True if the orthogonal vectors of complement need to standardize.
-        :type normalize: bool
         :param threshold: the tolerance that is allowed
         :type threshold: float
         :return: List of orthogonal vector of the complement if have, None otherwise
@@ -114,9 +112,6 @@ def orthogonal_complement(x: np.ndarray, normalize: bool = False, threshold: flo
     rank = (v > threshold).sum()
 
     oc = s[:, rank:]
-
-    if normalize:
-        oc = oc / np.sum(oc**2, axis=0)
     return oc
 
 
@@ -135,7 +130,7 @@ def project_vector_on_subspace(direction: np.ndarray, subspace_matrix: np.ndarra
     for orth_vector in subspace_matrix.T:
         param = np.dot(direction, orth_vector) / np.dot(orth_vector, orth_vector)
         res += param * orth_vector
-    res = res / np.sum(res ** 2)
+    # res = res / np.linalg.norm(res)
     return res
 
 
@@ -194,6 +189,7 @@ def find_face_intersection_bisection(gamma: np.ndarray, starting_point: np.ndarr
     # direction = direction / np.linalg.norm(direction)  # normalize direction
     # 1. Find upper and lower bound
     k = 1
+
     while majorized((starting_point + k*direction) / np.sum((starting_point + k*direction)) * np.sum(gamma), gamma):
         # We make sure the tested point is in the hyperplane containing the expohedron
         # The division phase is for point projection to expohedron

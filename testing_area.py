@@ -6,7 +6,7 @@ import random
 
 from helpers import orthogonal_complement, project_vector_on_subspace, intersect_vector_space, check_spanned_vector
 from helpers import majorized, find_face_intersection_bisection, project_point_onto_plane, invert_permutation
-from expohedron_face import identify_face, find_face_subspace_without_parent
+from expohedron_face import identify_face, find_face_subspace_without_parent, post_correction
 
 from expohedron import caratheodory_decomposition_pbm_gls
 from evaluation import evaluate_probabilty
@@ -38,12 +38,13 @@ def optimal_utility_point_in_fair_level(start_point: np.ndarray, basis_vectors: 
     while True:
         current_point = find_face_intersection_bisection(gamma, current_point, current_direction)
         current_face = identify_face(gamma, current_point)
+        # current_point = post_correction(current_face, current_point)
 
         if not previous_face.dim >= current_face.dim:
             raise Exception("if not face.dim < current_dim", "A precision error is likely to have occurred")
 
         pareto_face_basis_matrix = find_face_subspace_without_parent(current_face)
-        face_basis_vectors = orthogonal_complement(pareto_face_basis_matrix, True)
+        face_basis_vectors = orthogonal_complement(pareto_face_basis_matrix)
 
         current_search_faces = intersect_vector_space(face_basis_vectors, basis_vectors)
         # current_search_faces[np.abs(current_search_faces) < 1e-13] = 0
@@ -52,11 +53,10 @@ def optimal_utility_point_in_fair_level(start_point: np.ndarray, basis_vectors: 
             break
 
         # # TODO: error here
-        if current_face.dim == previous_dim:
+        if current_face.dim == previous_face.dim:
             print(current_face.dim)
             break
 
-        previous_dim = current_face.dim
         previous_face = current_face
         current_direction = project_vector_on_subspace(current_direction, current_search_faces)
         # current_direction[np.abs(current_direction) < 1e-13] = 0
@@ -68,13 +68,12 @@ def example(relevance_score: np.ndarray, item_group_masking: np.ndarray, group_f
     n_doc = item_group_masking.shape[0]
 
     expohedron_basis = orthogonal_complement(np.asarray([[1.0] * n_doc]).T)
-    fairness_level_basis_vector = orthogonal_complement(item_group_masking, True)
+    fairness_level_basis_vector = orthogonal_complement(item_group_masking)
     print("Fairness_level_direction_space")
 
     # Since the vector space is orthogonal with a subspace in the expohedron space
     # The intersection space will also be the projection space
     fairness_level_projection_space = intersect_vector_space(item_group_masking, expohedron_basis)
-    # print(fairness_level_projection_space)
 
     optimal_fairness_direction = project_vector_on_subspace(relevance_score, fairness_level_projection_space)
     print("Optimal_fairness_direction")
@@ -93,7 +92,7 @@ def example(relevance_score: np.ndarray, item_group_masking: np.ndarray, group_f
     pareto_set.append(pareto_point)
 
     print("Start search for pareto front")
-    step = 0.01
+    step = 0.05
     while True:
         initiate_fair_point = initiate_fair_point + step * optimal_fairness_direction
         initiate_fair_point = initiate_fair_point / np.sum(initiate_fair_point) * np.sum(gamma)
@@ -101,7 +100,7 @@ def example(relevance_score: np.ndarray, item_group_masking: np.ndarray, group_f
             break
         pareto_point = optimal_utility_point_in_fair_level(initiate_fair_point, fairness_level_basis_vector,
                                                            direction, gamma)
-        # assert majorized(pareto_point, gamma), "Projection went wrong, new point is out of the hedron."
+        assert majorized(pareto_point, gamma), "Projection went wrong, new point is out of the hedron."
         pareto_set.append(pareto_point)
 
     pareto_set.append(gamma[invert_permutation(np.argsort(-relevance_score))])
