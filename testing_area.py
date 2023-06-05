@@ -33,12 +33,10 @@ def optimal_utility_point_in_fair_level(start_point: np.ndarray, basis_vectors: 
     current_direction = direction
     current_point = start_point
     previous_face = identify_face(gamma, current_point)
-    previous_dim = previous_face.dim
 
     while True:
         current_point = find_face_intersection_bisection(gamma, current_point, current_direction)
         current_face = identify_face(gamma, current_point)
-        # current_point = post_correction(current_face, current_point)
 
         if not previous_face.dim >= current_face.dim:
             raise Exception("if not face.dim < current_dim", "A precision error is likely to have occurred")
@@ -47,14 +45,14 @@ def optimal_utility_point_in_fair_level(start_point: np.ndarray, basis_vectors: 
         face_basis_vectors = orthogonal_complement(pareto_face_basis_matrix)
 
         current_search_faces = intersect_vector_space(face_basis_vectors, basis_vectors)
-        # current_search_faces[np.abs(current_search_faces) < 1e-13] = 0
 
         if current_search_faces.shape[1] == 0:
             break
 
         # # TODO: error here
         if current_face.dim == previous_face.dim:
-            print(current_face.dim)
+            # print(current_face.splits)
+            # print(previous_face.dim)
             break
 
         previous_face = current_face
@@ -74,15 +72,21 @@ def example(relevance_score: np.ndarray, item_group_masking: np.ndarray, group_f
     # Since the vector space is orthogonal with a subspace in the expohedron space
     # The intersection space will also be the projection space
     fairness_level_projection_space = intersect_vector_space(item_group_masking, expohedron_basis)
-
-    optimal_fairness_direction = project_vector_on_subspace(relevance_score, fairness_level_projection_space)
-    print("Optimal_fairness_direction")
+    # print(fairness_level_projection_space)
 
     # Random point in fairness surface
     print('Initiate point')
     initiate_fair_point = np.asarray([gamma.sum() / n_doc] * n_doc)
     initiate_fair_point = project_point_onto_plane(initiate_fair_point, item_group_masking, group_fairness)
     assert majorized(initiate_fair_point, gamma), "Initiate point is not in the expohedron"
+
+    # optimal_fairness_direction = project_vector_on_subspace(relevance_score, fairness_level_projection_space)
+    print("Optimal_fairness_direction")
+    # print(optimal_fairness_direction)
+    end_point = gamma[invert_permutation(np.argsort(-relevance_score))]
+    # raise Exception("Test")
+    optimal_fairness_direction = project_vector_on_subspace(end_point - initiate_fair_point,
+                                                            fairness_level_projection_space)
 
     direction = project_vector_on_subspace(relevance_score, fairness_level_basis_vector)
 
@@ -103,7 +107,8 @@ def example(relevance_score: np.ndarray, item_group_masking: np.ndarray, group_f
         assert majorized(pareto_point, gamma), "Projection went wrong, new point is out of the hedron."
         pareto_set.append(pareto_point)
 
-    pareto_set.append(gamma[invert_permutation(np.argsort(-relevance_score))])
+    pareto_set.append(end_point)
+    # pareto_set.append(gamma[invert_permutation(np.argsort(-relevance_score))])
     # print(pareto_set)
 
     objectives = []
@@ -117,10 +122,10 @@ def example(relevance_score: np.ndarray, item_group_masking: np.ndarray, group_f
 
 
 def load_data():
-    # n_doc = 3
+    # n_doc = 4
     # n_group = 2
-    # relevance_score = np.asarray([0.7, 0.8, 1])
-    # item_group_masking = np.asarray([[0, 1], [1, 0], [1, 0]])
+    # relevance_score = np.asarray([0.7, 0.8, 1, 0.4])
+    # item_group_masking = np.asarray([[0, 1], [0, 1], [1, 0], [1, 0]])
 
     relevance_score = np.loadtxt("data_error/relevance_score.csv", delimiter=",").astype(np.double)
     item_group_masking = np.loadtxt("data_error/item_group.csv", delimiter=",").astype(np.int32)
@@ -129,7 +134,7 @@ def load_data():
     # n_doc = 40
     # n_group = 3
     #
-    # np.random.seed(n_doc*2)
+    # np.random.seed(n_doc)
     # relevance_score = np.random.rand(n_doc)
     # # np.savetxt("data_error/relevance_score.csv", relevance_score, delimiter=",")
     #
