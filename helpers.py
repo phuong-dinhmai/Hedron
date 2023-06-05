@@ -130,7 +130,6 @@ def project_vector_on_subspace(direction: np.ndarray, subspace_matrix: np.ndarra
     for orth_vector in subspace_matrix.T:
         param = np.dot(direction, orth_vector) / np.dot(orth_vector, orth_vector)
         res += param * orth_vector
-    # res = res / np.linalg.norm(res)
     return res
 
 
