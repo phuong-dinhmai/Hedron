@@ -30,7 +30,7 @@ class Face:
         self.splits = splits
         self.dim = n - len(splits)
 
-    def contains(self, point: np.array, tolerance: float = 1e-12) -> bool:
+    def contains(self, point: np.array, tolerance: float = LOW_TOLERANCE) -> bool:
         """
             Checks if a point is inside the face
         :param point:
@@ -41,7 +41,7 @@ class Face:
         maj = majorized(point, self.gamma)  
         # Check if the splits of `point` are a subset of `self.splits`
         face_condition: bool = len(np.setdiff1d(self.splits, np.where(np.abs(np.cumsum(point[self.zone]) - np.cumsum(self.gamma)) < tolerance)[0])) == 0  
-        # print(maj, " ", face_condition)
+        print(maj, " ", face_condition)
         return maj and face_condition
 
     def equal(self, face: "Face") -> bool:

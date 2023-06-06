@@ -63,7 +63,7 @@ def invert_permutation(permutation):
     return np.argsort(permutation)
 
 
-def majorized(majorized_vector: np.array, majorizing_vector: np.array, tolerance: float = LOW_TOLERANCE) -> bool:
+def majorized(majorized_vector: np.array, majorizing_vector: np.array, tolerance: float = HIGH_TOLERANCE) -> bool:
     """
         Checks whether `a` is majorized by `b`: a<b
 

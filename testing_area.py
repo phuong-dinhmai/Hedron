@@ -37,17 +37,20 @@ def optimal_utility_point_in_fair_level(start_point: np.ndarray, basis_vectors: 
 
     while True:
         current_point = find_face_intersection_bisection(gamma, current_point, current_direction)
+        # current_point = current_point / np.sum(current_point) * np.sum(gamma)
         current_face = identify_face(gamma, current_point)
-        print(current_face.contains(current_point))
-        current_point = post_correction(current_face, current_point)
-        # print(current_face.dim)
 
         if not previous_face.dim >= current_face.dim:
             raise Exception("if not face.dim < current_dim", "A precision error is likely to have occurred")
 
+        # Post-correction
         pareto_face_basis_matrix = find_face_subspace_without_parent(current_face)
-        face_basis_vectors = orthogonal_complement(pareto_face_basis_matrix)
+        vertex_of_face = current_face.gamma[invert_permutation(current_face.zone)]
+        current_point = project_point_onto_plane(current_point, pareto_face_basis_matrix, pareto_face_basis_matrix.T @ vertex_of_face)
+        # current_point = current_point / np.sum(current_point) * np.sum(gamma)
+        assert current_face.contains(current_point), "Float point error"
 
+        face_basis_vectors = orthogonal_complement(pareto_face_basis_matrix)
         current_search_faces = intersect_vector_space(face_basis_vectors, basis_vectors)
         # current_search_faces[np.abs(current_search_faces) < 1e-13] = 0
 
@@ -103,10 +106,11 @@ def example(relevance_score: np.ndarray, item_group_masking: np.ndarray, group_f
     print("Start search for pareto front")
     step = 0.05
     nb_iteration = 1
+
     # while True:
     #     nb_iteration += 1
     #     print(nb_iteration)
-    #     start_point = initiate_fair_point + nb_iteration * step * optimal_fairness_direction
+    #     start_point = initiate_fair_point + (nb_iteration * step) * optimal_fairness_direction
     #     start_point = start_point / np.sum(start_point) * np.sum(gamma)
     #     if not majorized(start_point, gamma):
     #         break
@@ -115,10 +119,11 @@ def example(relevance_score: np.ndarray, item_group_masking: np.ndarray, group_f
     #     assert majorized(pareto_point, gamma), "Projection went wrong, new point is out of the hedron."
     #     pareto_set.append(pareto_point)
     #     # break
+
     while True:
         nb_iteration += 1
         # print(nb_iteration)
-        initiate_fair_point = initiate_fair_point + nb_iteration * step * optimal_fairness_direction
+        initiate_fair_point = initiate_fair_point + step * optimal_fairness_direction
         initiate_fair_point = initiate_fair_point / np.sum(initiate_fair_point) * np.sum(gamma)
         if not majorized(initiate_fair_point, gamma):
             break
@@ -129,8 +134,6 @@ def example(relevance_score: np.ndarray, item_group_masking: np.ndarray, group_f
         # break
 
     pareto_set.append(end_point)
-    # pareto_set.append(gamma[invert_permutation(np.argsort(-relevance_score))])
-    # print(pareto_set)
 
     objectives = []
     for exposure in pareto_set:
@@ -148,22 +151,24 @@ def load_data():
     # relevance_score = np.asarray([0.7, 0.8, 1, 0.4])
     # item_group_masking = np.asarray([[0, 1], [0, 1], [1, 0], [1, 0]])
 
-    relevance_score = np.loadtxt("data_error/relevance_score.csv", delimiter=",").astype(np.double)
-    item_group_masking = np.loadtxt("data_error/item_group.csv", delimiter=",").astype(np.int32)
-    n_doc = item_group_masking.shape[0]
+    # relevance_score = np.loadtxt("data_error/relevance_score.csv", delimiter=",").astype(np.double)
+    # # relevance_score = np.round(relevance_score, decimals=6)
+    # item_group_masking = np.loadtxt("data_error/item_group.csv", delimiter=",").astype(np.double)
+    # n_doc = item_group_masking.shape[0]
 
-    # n_doc = 40
-    # n_group = 3
+    n_doc = 40
+    n_group = 3
     
-    # np.random.seed(n_doc)
-    # relevance_score = np.random.rand(n_doc)
-    # # np.savetxt("data_error/relevance_score.csv", relevance_score, delimiter=",")
+    np.random.seed(n_doc)
+    relevance_score = np.random.rand(n_doc)
+    relevance_score = np.round(relevance_score, decimals=6)
+    # np.savetxt("data_error/relevance_score.csv", relevance_score, delimiter=",")
     
-    # item_group_masking = np.zeros((n_doc, n_group))
-    # for i in range(n_doc):
-    #     j = np.random.randint(n_group, size=1)
-    #     item_group_masking[i][j[0]] = 1
-    # # np.savetxt("data_error/item_group.csv", item_group_masking, delimiter=",")
+    item_group_masking = np.zeros((n_doc, n_group))
+    for i in range(n_doc):
+        j = np.random.randint(n_group, size=1)
+        item_group_masking[i][j[0]] = 1
+    # np.savetxt("data_error/item_group.csv", item_group_masking, delimiter=",")
 
     gamma = 1 / np.log(np.arange(0, n_doc) + 2)
     group_size = item_group_masking.sum(axis=0)
