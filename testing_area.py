@@ -33,10 +33,13 @@ def optimal_utility_point_in_fair_level(start_point: np.ndarray, basis_vectors: 
     current_direction = direction
     current_point = start_point
     previous_face = identify_face(gamma, current_point)
+    # print(previous_face.dim)
 
     while True:
         current_point = find_face_intersection_bisection(gamma, current_point, current_direction)
         current_face = identify_face(gamma, current_point)
+        current_point = post_correction(current_face, current_point)
+        # print(current_face.dim)
 
         if not previous_face.dim >= current_face.dim:
             raise Exception("if not face.dim < current_dim", "A precision error is likely to have occurred")
@@ -45,13 +48,14 @@ def optimal_utility_point_in_fair_level(start_point: np.ndarray, basis_vectors: 
         face_basis_vectors = orthogonal_complement(pareto_face_basis_matrix)
 
         current_search_faces = intersect_vector_space(face_basis_vectors, basis_vectors)
+        # current_search_faces[np.abs(current_search_faces) < 1e-13] = 0
 
         if current_search_faces.shape[1] == 0:
             break
 
         # # TODO: error here
         if current_face.dim == previous_face.dim:
-            # print(current_face.splits)
+            print(current_face.splits)
             # print(previous_face.dim)
             break
 
@@ -96,7 +100,7 @@ def example(relevance_score: np.ndarray, item_group_masking: np.ndarray, group_f
     pareto_set.append(pareto_point)
 
     print("Start search for pareto front")
-    step = 0.05
+    step = 0.01
     while True:
         initiate_fair_point = initiate_fair_point + step * optimal_fairness_direction
         initiate_fair_point = initiate_fair_point / np.sum(initiate_fair_point) * np.sum(gamma)
@@ -106,6 +110,7 @@ def example(relevance_score: np.ndarray, item_group_masking: np.ndarray, group_f
                                                            direction, gamma)
         assert majorized(pareto_point, gamma), "Projection went wrong, new point is out of the hedron."
         pareto_set.append(pareto_point)
+        # break
 
     pareto_set.append(end_point)
     # pareto_set.append(gamma[invert_permutation(np.argsort(-relevance_score))])
@@ -117,7 +122,7 @@ def example(relevance_score: np.ndarray, item_group_masking: np.ndarray, group_f
         unfairness = np.sum((exposure.T @ item_group_masking - group_fairness) ** 2)
 
         objectives.append([user_utilities, unfairness])
-    print(objectives)
+    # print(objectives)
     return objectives
 
 
