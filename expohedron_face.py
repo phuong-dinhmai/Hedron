@@ -1,7 +1,6 @@
 import numpy as np
 from scipy.linalg import orth
 
-from expohedron import find_face_subspace
 from helpers import majorized, invert_permutation, project_point_onto_plane
 
 LOW_TOLERANCE = 1e-12
@@ -38,9 +37,11 @@ class Face:
         :return:
         :rtype: bool
         """
-        maj = majorized(point, self.gamma)  # majorization condition
-        face_condition: bool = len(np.setdiff1d(self.splits, np.where(np.abs(np.cumsum(point[self.zone]) - np.cumsum(self.gamma)) < tolerance)[0])) == 0  # Check if the splits
-        # of `point` are a subset of `self.splits`
+        # majorization condition
+        maj = majorized(point, self.gamma)  
+        # Check if the splits of `point` are a subset of `self.splits`
+        face_condition: bool = len(np.setdiff1d(self.splits, np.where(np.abs(np.cumsum(point[self.zone]) - np.cumsum(self.gamma)) < tolerance)[0])) == 0  
+        # print(maj, " ", face_condition)
         return maj and face_condition
 
     def equal(self, face: "Face") -> bool:
@@ -103,7 +104,7 @@ def identify_face(gamma: np.ndarray, point_on_face: np.ndarray, tolerance: float
 
 def post_correction(face, point_on_face):
     vertex_of_face = face.gamma[invert_permutation(face.zone)]
-    face_subspace = find_face_subspace(face)
+    face_subspace = find_face_subspace_without_parent(face)
     projected_point = project_point_onto_plane(point_on_face, face_subspace, face_subspace.T @ vertex_of_face)
     assert face.contains(projected_point), "There has been an error in the projection on a face's subspace"
     return projected_point

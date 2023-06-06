@@ -194,22 +194,40 @@ def find_face_intersection_bisection(gamma: np.ndarray, starting_point: np.ndarr
         # The division phase is for point projection to expohedron
         k *= 2
 
-    upper_bound = (starting_point + k*direction) / np.sum((starting_point + k*direction)) * np.sum(gamma)
-    lower_bound = starting_point
+    upper_bound = k
+    lower_bound = 0
 
     # 2. Do bisection
     nb_iterations = 0
     while True:
         nb_iterations += 1
-        center = (upper_bound + lower_bound) / 2
-        if majorized(center, gamma, tolerance=precision):  # project center on face's affine subspace
+        center = (upper_bound + lower_bound) / 2.0
+        point = (starting_point + center*direction) / np.sum((starting_point + center*direction)) * np.sum(gamma)
+        if majorized(point, gamma, tolerance=precision):  # project center on face's affine subspace
             lower_bound = center
         else:
             upper_bound = center
-        if np.all(np.abs(upper_bound - lower_bound) < precision):
-            return lower_bound
+        if (upper_bound - lower_bound) < precision:
+            return (starting_point + lower_bound*direction) / np.sum((starting_point + lower_bound*direction)) * np.sum(gamma)
         else:
             pass
+
+    # upper_bound = (starting_point + k*direction) / np.sum((starting_point + k*direction)) * np.sum(gamma)
+    # lower_bound = starting_point
+
+    # # 2. Do bisection
+    # nb_iterations = 0
+    # while True:
+    #     nb_iterations += 1
+    #     center = (upper_bound + lower_bound) / 2
+    #     if majorized(center, gamma, tolerance=precision):  # project center on face's affine subspace
+    #         lower_bound = center
+    #     else:
+    #         upper_bound = center
+    #     if np.all(np.abs(upper_bound - lower_bound) < precision):
+    #         return lower_bound
+    #     else:
+    #         pass
 
 
 if __name__ == "__main__":

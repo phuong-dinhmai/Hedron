@@ -38,6 +38,7 @@ def optimal_utility_point_in_fair_level(start_point: np.ndarray, basis_vectors: 
     while True:
         current_point = find_face_intersection_bisection(gamma, current_point, current_direction)
         current_face = identify_face(gamma, current_point)
+        print(current_face.contains(current_point))
         current_point = post_correction(current_face, current_point)
         # print(current_face.dim)
 
@@ -100,9 +101,24 @@ def example(relevance_score: np.ndarray, item_group_masking: np.ndarray, group_f
     pareto_set.append(pareto_point)
 
     print("Start search for pareto front")
-    step = 0.01
+    step = 0.05
+    nb_iteration = 1
+    # while True:
+    #     nb_iteration += 1
+    #     print(nb_iteration)
+    #     start_point = initiate_fair_point + nb_iteration * step * optimal_fairness_direction
+    #     start_point = start_point / np.sum(start_point) * np.sum(gamma)
+    #     if not majorized(start_point, gamma):
+    #         break
+    #     pareto_point = optimal_utility_point_in_fair_level(start_point, fairness_level_basis_vector,
+    #                                                        direction, gamma)
+    #     assert majorized(pareto_point, gamma), "Projection went wrong, new point is out of the hedron."
+    #     pareto_set.append(pareto_point)
+    #     # break
     while True:
-        initiate_fair_point = initiate_fair_point + step * optimal_fairness_direction
+        nb_iteration += 1
+        # print(nb_iteration)
+        initiate_fair_point = initiate_fair_point + nb_iteration * step * optimal_fairness_direction
         initiate_fair_point = initiate_fair_point / np.sum(initiate_fair_point) * np.sum(gamma)
         if not majorized(initiate_fair_point, gamma):
             break
@@ -138,11 +154,11 @@ def load_data():
 
     # n_doc = 40
     # n_group = 3
-    #
+    
     # np.random.seed(n_doc)
     # relevance_score = np.random.rand(n_doc)
     # # np.savetxt("data_error/relevance_score.csv", relevance_score, delimiter=",")
-    #
+    
     # item_group_masking = np.zeros((n_doc, n_group))
     # for i in range(n_doc):
     #     j = np.random.randint(n_group, size=1)
