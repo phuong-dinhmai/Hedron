@@ -66,7 +66,7 @@ def experiment(relevance_score, item_list):
     for point in pareto_set:
         objecties = evaluate_probabilty(point, relevance_score, item_list)
         pareto_front.append(objecties)
-    # print(pareto_front)
+    print(pareto_front)
     return pareto_front
 
 
