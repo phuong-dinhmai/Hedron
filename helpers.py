@@ -102,6 +102,7 @@ def orthogonal_complement(x: np.ndarray, threshold: float = LOW_TOLERANCE):
         :rtype: np.ndarray
     """
     x = np.asarray(x)
+    x = orth(x)
     r, c = x.shape
     if r < c:
         import warnings
@@ -112,6 +113,33 @@ def orthogonal_complement(x: np.ndarray, threshold: float = LOW_TOLERANCE):
     rank = (v > threshold).sum()
 
     oc = s[:, rank:]
+    return oc
+
+
+def matrix_linear_independence(x: np.ndarray, threshold: float = LOW_TOLERANCE):
+    """
+        Reduce matrix rows to create vectors independent linear matrix
+
+        This works along axis zero, i.e. rank == column rank, or number of rows > column rank otherwise matrix returned is empty
+        :param x: the matrix need to find the vectors independent linear
+        :type x: numpy.ndarray
+        :param threshold: the tolerance that is allowed
+        :type threshold: float
+        :return: List of independent linear vector of the complement if have, None otherwise
+        :rtype: np.ndarray
+    """
+    x = np.asarray(x)
+    x = orth(x)
+    r, c = x.shape
+    if r < c:
+        import warnings
+        warnings.warn('fewer rows than columns', UserWarning)
+
+    # we assume svd is ordered by decreasing singular value, o.w. need sort
+    s, v, d = np.linalg.svd(x)
+    rank = (v > threshold).sum()
+
+    oc = s[:, :rank]
     return oc
 
 
@@ -146,6 +174,11 @@ def project_point_onto_plane(point: np.ndarray, A: np.ndarray, b: np.ndarray):
         :return: The projection of the point in the subspace Ax=b
         :rtype: numpy.ndarray (1D)   
     """
+    # P = matrix_linear_independence(np.concatenate((A, [b]), axis=0))
+    # # print(P.shape)
+    # _A = P[:-1, :]
+    # _b = P[-1, :]
+    # return point - (_A.T @ point - _b) @ _A.T
     return point - (A.T @ point - b) @ A.T
 
 
@@ -160,6 +193,7 @@ def intersect_vector_space(orthogonal_space_1: np.ndarray, orthogonal_space_2: n
     P_u = projection_matrix_on_subspace(orthogonal_space_1)
     P_v = projection_matrix_on_subspace(orthogonal_space_2)
     return orthogonal_complement(orth(P_u @ P_v - np.identity(orthogonal_space_1.shape[0])))
+    # return null_space(orth(P_u @ P_v - np.identity(orthogonal_space_1.shape[0])))
 
 
 def find_face_intersection_bisection(gamma: np.ndarray, starting_point: np.ndarray,
@@ -194,40 +228,40 @@ def find_face_intersection_bisection(gamma: np.ndarray, starting_point: np.ndarr
         # The division phase is for point projection to expohedron
         k *= 2
 
-    upper_bound = k
-    lower_bound = 0
-
-    # 2. Do bisection
-    nb_iterations = 0
-    while True:
-        nb_iterations += 1
-        center = (upper_bound + lower_bound) / 2.0
-        point = (starting_point + center*direction) / np.sum((starting_point + center*direction)) * np.sum(gamma)
-        if majorized(point, gamma, tolerance=precision):  # project center on face's affine subspace
-            lower_bound = center
-        else:
-            upper_bound = center
-        if (upper_bound - lower_bound) < precision:
-            return (starting_point + lower_bound*direction) / np.sum((starting_point + lower_bound*direction)) * np.sum(gamma)
-        else:
-            pass
-
-    # upper_bound = (starting_point + k*direction) / np.sum((starting_point + k*direction)) * np.sum(gamma)
-    # lower_bound = starting_point
+    # upper_bound = k
+    # lower_bound = 0
 
     # # 2. Do bisection
     # nb_iterations = 0
     # while True:
     #     nb_iterations += 1
-    #     center = (upper_bound + lower_bound) / 2
-    #     if majorized(center, gamma, tolerance=precision):  # project center on face's affine subspace
+    #     center = (upper_bound + lower_bound) / 2.0
+    #     point = (starting_point + center*direction) / np.sum((starting_point + center*direction)) * np.sum(gamma)
+    #     if majorized(point, gamma, tolerance=precision):  # project center on face's affine subspace
     #         lower_bound = center
     #     else:
     #         upper_bound = center
-    #     if np.all(np.abs(upper_bound - lower_bound) < precision):
-    #         return lower_bound
+    #     if (upper_bound - lower_bound) < precision:
+    #         return (starting_point + lower_bound*direction) / np.sum((starting_point + lower_bound*direction)) * np.sum(gamma)
     #     else:
     #         pass
+
+    upper_bound = (starting_point + k*direction) / np.sum((starting_point + k*direction)) * np.sum(gamma)
+    lower_bound = starting_point
+
+    # 2. Do bisection
+    nb_iterations = 0
+    while True:
+        nb_iterations += 1
+        center = (upper_bound + lower_bound) / 2
+        if majorized(center, gamma, tolerance=precision):  # project center on face's affine subspace
+            lower_bound = center
+        else:
+            upper_bound = center
+        if np.all(np.abs(upper_bound - lower_bound) < precision):
+            return lower_bound
+        else:
+            pass
 
 
 if __name__ == "__main__":

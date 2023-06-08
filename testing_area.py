@@ -28,7 +28,7 @@ def draw(a, b):
     plt.show()
 
 
-def optimal_utility_point_in_fair_level(start_point: np.ndarray, basis_vectors: np.ndarray,
+def optimal_utility_point_in_fair_level(start_point: np.ndarray, orthogonal_vectors: np.ndarray,
                                         direction: np.ndarray, gamma: np.ndarray):
     current_direction = direction
     current_point = start_point
@@ -37,7 +37,7 @@ def optimal_utility_point_in_fair_level(start_point: np.ndarray, basis_vectors: 
 
     while True:
         current_point = find_face_intersection_bisection(gamma, current_point, current_direction)
-        # current_point = current_point / np.sum(current_point) * np.sum(gamma)
+        current_point = current_point / np.sum(current_point) * np.sum(gamma)
         current_face = identify_face(gamma, current_point)
 
         if not previous_face.dim >= current_face.dim:
@@ -46,13 +46,15 @@ def optimal_utility_point_in_fair_level(start_point: np.ndarray, basis_vectors: 
         # Post-correction
         pareto_face_basis_matrix = find_face_subspace_without_parent(current_face)
         vertex_of_face = current_face.gamma[invert_permutation(current_face.zone)]
-        current_point = project_point_onto_plane(current_point, pareto_face_basis_matrix, pareto_face_basis_matrix.T @ vertex_of_face)
-        # current_point = current_point / np.sum(current_point) * np.sum(gamma)
-        assert current_face.contains(current_point), "Float point error"
 
-        face_basis_vectors = orthogonal_complement(pareto_face_basis_matrix)
-        current_search_faces = intersect_vector_space(face_basis_vectors, basis_vectors)
+        search_space_orthogonal = np.concatenate((pareto_face_basis_matrix, orthogonal_vectors), axis=1)
+        current_search_faces = orthogonal_complement(search_space_orthogonal)
         # current_search_faces[np.abs(current_search_faces) < 1e-13] = 0
+
+        # b = np.concatenate((pareto_face_basis_matrix.T @ vertex_of_face, orthogonal_vectors.T @ start_point), axis=0)
+        # current_point = project_point_onto_plane(current_point, search_space_orthogonal, b)
+        current_point = project_point_onto_plane(current_point, pareto_face_basis_matrix, pareto_face_basis_matrix.T @ vertex_of_face)
+        assert current_face.contains(current_point), "Float point error"
 
         if current_search_faces.shape[1] == 0:
             break
@@ -64,7 +66,7 @@ def optimal_utility_point_in_fair_level(start_point: np.ndarray, basis_vectors: 
             break
 
         previous_face = current_face
-        current_direction = project_vector_on_subspace(current_direction, current_search_faces)
+        current_direction = project_vector_on_subspace(direction, current_search_faces)
         # current_direction[np.abs(current_direction) < 1e-13] = 0
 
     return current_point
@@ -96,10 +98,10 @@ def example(relevance_score: np.ndarray, item_group_masking: np.ndarray, group_f
     optimal_fairness_direction = project_vector_on_subspace(end_point - initiate_fair_point,
                                                             fairness_level_projection_space)
 
-    direction = project_vector_on_subspace(relevance_score, fairness_level_basis_vector)
+    direction =  project_vector_on_subspace(relevance_score, fairness_level_basis_vector)
 
     pareto_set = []
-    pareto_point = optimal_utility_point_in_fair_level(initiate_fair_point, fairness_level_basis_vector,
+    pareto_point = optimal_utility_point_in_fair_level(initiate_fair_point, item_group_masking,
                                                        direction, gamma)
     pareto_set.append(pareto_point)
 
@@ -127,7 +129,7 @@ def example(relevance_score: np.ndarray, item_group_masking: np.ndarray, group_f
         initiate_fair_point = initiate_fair_point / np.sum(initiate_fair_point) * np.sum(gamma)
         if not majorized(initiate_fair_point, gamma):
             break
-        pareto_point = optimal_utility_point_in_fair_level(initiate_fair_point, fairness_level_basis_vector,
+        pareto_point = optimal_utility_point_in_fair_level(initiate_fair_point, item_group_masking,
                                                            direction, gamma)
         assert majorized(pareto_point, gamma), "Projection went wrong, new point is out of the hedron."
         pareto_set.append(pareto_point)
@@ -151,24 +153,22 @@ def load_data():
     # relevance_score = np.asarray([0.7, 0.8, 1, 0.4])
     # item_group_masking = np.asarray([[0, 1], [0, 1], [1, 0], [1, 0]])
 
-    # relevance_score = np.loadtxt("data_error/relevance_score.csv", delimiter=",").astype(np.double)
-    # # relevance_score = np.round(relevance_score, decimals=6)
-    # item_group_masking = np.loadtxt("data_error/item_group.csv", delimiter=",").astype(np.double)
-    # n_doc = item_group_masking.shape[0]
+    relevance_score = np.loadtxt("data_error/relevance_score.csv", delimiter=",").astype(np.double)
+    item_group_masking = np.loadtxt("data_error/item_group.csv", delimiter=",").astype(np.double)
+    n_doc = item_group_masking.shape[0]
 
-    n_doc = 40
-    n_group = 3
+    # n_doc = 40
+    # n_group = 3
     
-    np.random.seed(n_doc)
-    relevance_score = np.random.rand(n_doc)
-    relevance_score = np.round(relevance_score, decimals=6)
-    # np.savetxt("data_error/relevance_score.csv", relevance_score, delimiter=",")
+    # np.random.seed(n_doc)
+    # relevance_score = np.random.rand(n_doc)
+    # # np.savetxt("data_error/relevance_score.csv", relevance_score, delimiter=",")
     
-    item_group_masking = np.zeros((n_doc, n_group))
-    for i in range(n_doc):
-        j = np.random.randint(n_group, size=1)
-        item_group_masking[i][j[0]] = 1
-    # np.savetxt("data_error/item_group.csv", item_group_masking, delimiter=",")
+    # item_group_masking = np.zeros((n_doc, n_group))
+    # for i in range(n_doc):
+    #     j = np.random.randint(n_group, size=1)
+    #     item_group_masking[i][j[0]] = 1
+    # # np.savetxt("data_error/item_group.csv", item_group_masking, delimiter=",")
 
     gamma = 1 / np.log(np.arange(0, n_doc) + 2)
     group_size = item_group_masking.sum(axis=0)
