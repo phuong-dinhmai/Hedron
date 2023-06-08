@@ -30,10 +30,14 @@ def draw(a, b):
 
 def optimal_utility_point_in_fair_level(start_point: np.ndarray, orthogonal_vectors: np.ndarray,
                                         direction: np.ndarray, gamma: np.ndarray):
-    current_direction = direction
     current_point = start_point
     previous_face = identify_face(gamma, current_point)
-    # print(previous_face.dim)
+    current_direction = direction
+    basis_vectors = orthogonal_complement(orthogonal_vectors)
+    # pareto_face_basis_vectors = find_face_subspace_without_parent(previous_face)
+    # current_search_faces = np.concatenate((pareto_face_basis_vectors, orthogonal_vectors), axis=1)
+    # current_search_faces = orth(current_search_faces)
+    # current_direction = project_vector_on_subspace(direction, current_search_faces)
 
     while True:
         current_point = find_face_intersection_bisection(gamma, current_point, current_direction)
@@ -44,19 +48,17 @@ def optimal_utility_point_in_fair_level(start_point: np.ndarray, orthogonal_vect
             raise Exception("if not face.dim < current_dim", "A precision error is likely to have occurred")
 
         # Post-correction
-        pareto_face_basis_matrix = find_face_subspace_without_parent(current_face)
+        pareto_face_basis_vectors = find_face_subspace_without_parent(current_face)
+        face_complement = orthogonal_complement(pareto_face_basis_vectors)
+
         vertex_of_face = current_face.gamma[invert_permutation(current_face.zone)]
 
-        search_space_orthogonal = np.concatenate((pareto_face_basis_matrix, orthogonal_vectors), axis=1)
-        current_search_faces = orthogonal_complement(search_space_orthogonal)
-        # current_search_faces[np.abs(current_search_faces) < 1e-13] = 0
+        current_search_faces = np.concatenate((pareto_face_basis_vectors, orthogonal_vectors), axis=1)
+        # A = np.concatenate((face_complement, basis_vectors), axis=1)
+        # b = np.concatenate((face_complement.T @ vertex_of_face, basis_vectors.T @ start_point), axis=0)
+        # current_search_faces = orth(np.concatenate((current_search_faces, [b]), axis=0))
 
-        # b = np.concatenate((pareto_face_basis_matrix.T @ vertex_of_face, orthogonal_vectors.T @ start_point), axis=0)
-        # current_point = project_point_onto_plane(current_point, search_space_orthogonal, b)
-        current_point = project_point_onto_plane(current_point, pareto_face_basis_matrix, pareto_face_basis_matrix.T @ vertex_of_face)
-        assert current_face.contains(current_point), "Float point error"
-
-        if current_search_faces.shape[1] == 0:
+        if face_complement.shape[1] == 0:
             break
 
         # # TODO: error here
@@ -65,8 +67,13 @@ def optimal_utility_point_in_fair_level(start_point: np.ndarray, orthogonal_vect
             # print(previous_face.dim)
             break
 
+        # current_point = project_point_onto_plane(current_point, A, b)
+        current_point = project_point_onto_plane(current_point, face_complement,
+                                                 face_complement.T @ vertex_of_face)
+        assert current_face.contains(current_point), "Float point error"
+
         previous_face = current_face
-        current_direction = project_vector_on_subspace(direction, current_search_faces)
+        current_direction = project_vector_on_subspace(direction, orth(current_search_faces))
         # current_direction[np.abs(current_direction) < 1e-13] = 0
 
     return current_point
@@ -91,45 +98,32 @@ def example(relevance_score: np.ndarray, item_group_masking: np.ndarray, group_f
     assert majorized(initiate_fair_point, gamma), "Initiate point is not in the expohedron"
 
     # optimal_fairness_direction = project_vector_on_subspace(relevance_score, fairness_level_projection_space)
-    print("Optimal_fairness_direction")
-    # print(optimal_fairness_direction)
     end_point = gamma[invert_permutation(np.argsort(-relevance_score))]
-    # raise Exception("Test")
     optimal_fairness_direction = project_vector_on_subspace(end_point - initiate_fair_point,
                                                             fairness_level_projection_space)
+    print("Optimal_fairness_direction")
+    # print(optimal_fairness_direction)
 
-    direction =  project_vector_on_subspace(relevance_score, fairness_level_basis_vector)
+    direction = project_vector_on_subspace(relevance_score, fairness_level_basis_vector)
+    # direction = relevance_score
 
     pareto_set = []
-    pareto_point = optimal_utility_point_in_fair_level(initiate_fair_point, item_group_masking,
+    pareto_point = optimal_utility_point_in_fair_level(initiate_fair_point, fairness_level_basis_vector,
                                                        direction, gamma)
     pareto_set.append(pareto_point)
 
     print("Start search for pareto front")
-    step = 0.05
+    step = 0.01
     nb_iteration = 1
-
-    # while True:
-    #     nb_iteration += 1
-    #     print(nb_iteration)
-    #     start_point = initiate_fair_point + (nb_iteration * step) * optimal_fairness_direction
-    #     start_point = start_point / np.sum(start_point) * np.sum(gamma)
-    #     if not majorized(start_point, gamma):
-    #         break
-    #     pareto_point = optimal_utility_point_in_fair_level(start_point, fairness_level_basis_vector,
-    #                                                        direction, gamma)
-    #     assert majorized(pareto_point, gamma), "Projection went wrong, new point is out of the hedron."
-    #     pareto_set.append(pareto_point)
-    #     # break
 
     while True:
         nb_iteration += 1
         # print(nb_iteration)
-        initiate_fair_point = initiate_fair_point + step * optimal_fairness_direction
-        initiate_fair_point = initiate_fair_point / np.sum(initiate_fair_point) * np.sum(gamma)
-        if not majorized(initiate_fair_point, gamma):
+        start_point = initiate_fair_point + (nb_iteration * step) * optimal_fairness_direction
+        start_point = start_point / np.sum(start_point) * np.sum(gamma)
+        if not majorized(start_point, gamma):
             break
-        pareto_point = optimal_utility_point_in_fair_level(initiate_fair_point, item_group_masking,
+        pareto_point = optimal_utility_point_in_fair_level(start_point, fairness_level_basis_vector,
                                                            direction, gamma)
         assert majorized(pareto_point, gamma), "Projection went wrong, new point is out of the hedron."
         pareto_set.append(pareto_point)
@@ -143,7 +137,7 @@ def example(relevance_score: np.ndarray, item_group_masking: np.ndarray, group_f
         unfairness = np.sum((exposure.T @ item_group_masking - group_fairness) ** 2)
 
         objectives.append([user_utilities, unfairness])
-    # print(objectives)
+    print(objectives)
     return objectives
 
 
@@ -159,11 +153,11 @@ def load_data():
 
     # n_doc = 40
     # n_group = 3
-    
+    #
     # np.random.seed(n_doc)
     # relevance_score = np.random.rand(n_doc)
     # # np.savetxt("data_error/relevance_score.csv", relevance_score, delimiter=",")
-    
+    #
     # item_group_masking = np.zeros((n_doc, n_group))
     # for i in range(n_doc):
     #     j = np.random.randint(n_group, size=1)

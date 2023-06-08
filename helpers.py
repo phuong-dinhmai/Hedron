@@ -174,12 +174,14 @@ def project_point_onto_plane(point: np.ndarray, A: np.ndarray, b: np.ndarray):
         :return: The projection of the point in the subspace Ax=b
         :rtype: numpy.ndarray (1D)   
     """
-    # P = matrix_linear_independence(np.concatenate((A, [b]), axis=0))
-    # # print(P.shape)
-    # _A = P[:-1, :]
-    # _b = P[-1, :]
-    # return point - (_A.T @ point - _b) @ _A.T
-    return point - (A.T @ point - b) @ A.T
+    T = np.concatenate((A, [b]), axis=0)
+    T = orth(T)
+    _A = T[:-1, :]
+    _b = T[-1, :]
+    P = _A @ np.linalg.inv(_A.T @ _A)
+    return (np.eye(_A.shape[0]) - P @ _A.T) @ point + P @ _b
+    # P = A @ np.linalg.inv(A.T @ A)
+    # return (np.eye(A.shape[0]) - P @ A.T) @ point + P @ b
 
 
 def intersect_vector_space(orthogonal_space_1: np.ndarray, orthogonal_space_2: np.ndarray):
