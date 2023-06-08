@@ -30,9 +30,48 @@ def draw(a, b):
 
 def optimal_utility_point_in_fair_level(start_point: np.ndarray, orthogonal_vectors: np.ndarray,
                                         direction: np.ndarray, gamma: np.ndarray):
-    current_direction = direction
+    # current_point = start_point
+    # current_face = identify_face(gamma, current_point)
+    # corrected_point = post_correction(current_face, current_point)
+    # print("Test: ", current_face.dim)
+
+    # k = 0
+    # while True:
+    #     k += 1
+    #     face_orth = find_face_subspace_without_parent(current_face)
+    #     vertex_of_face = current_face.gamma[invert_permutation(current_face.zone)]
+
+    #     search_space_orthogonal = np.concatenate((face_orth, orthogonal_vectors), axis=1)
+    #     b = np.concatenate((face_orth.T @ vertex_of_face, orthogonal_vectors.T @ start_point), axis=0)
+    #     current_search_faces = orthogonal_complement(search_space_orthogonal)
+
+    #     current_direction = project_vector_on_subspace(direction, current_search_faces)
+    #     # current_direction = project_point_onto_plane(direction, search_space_orthogonal, b)
+    #     # current_direction[np.abs(current_direction) < 1e-13] = 0.
+    #     # print(current_direction)
+        
+    #     new_point = find_face_intersection_bisection(gamma, corrected_point, current_direction)
+    #     new_face = identify_face(gamma, new_point)
+    #     corrected_point = post_correction(new_face, new_point)
+        
+    #     if not new_face.dim <= current_face.dim:
+    #         raise Exception("if not face.dim < current_dim", "A precision error is likely to have occurred")
+        
+    #     if current_search_faces.shape[1] == 1:
+    #         break
+
+    #     # TODO: error here
+    #     if current_face.dim == new_face.dim:
+    #         print(current_face.splits)
+    #         print(new_face.splits)
+    #         break
+        
+    #     current_point = new_point
+    #     current_face = new_face
+
     current_point = start_point
     previous_face = identify_face(gamma, current_point)
+    current_direction = direction
     # print(previous_face.dim)
 
     while True:
@@ -99,6 +138,8 @@ def example(relevance_score: np.ndarray, item_group_masking: np.ndarray, group_f
                                                             fairness_level_projection_space)
 
     direction =  project_vector_on_subspace(relevance_score, fairness_level_basis_vector)
+    # direction = project_point_onto_plane(relevance_score, item_group_masking, group_fairness)
+    # direction = relevance_score
 
     pareto_set = []
     pareto_point = optimal_utility_point_in_fair_level(initiate_fair_point, item_group_masking,
@@ -109,31 +150,31 @@ def example(relevance_score: np.ndarray, item_group_masking: np.ndarray, group_f
     step = 0.05
     nb_iteration = 1
 
-    # while True:
-    #     nb_iteration += 1
-    #     print(nb_iteration)
-    #     start_point = initiate_fair_point + (nb_iteration * step) * optimal_fairness_direction
-    #     start_point = start_point / np.sum(start_point) * np.sum(gamma)
-    #     if not majorized(start_point, gamma):
-    #         break
-    #     pareto_point = optimal_utility_point_in_fair_level(start_point, fairness_level_basis_vector,
-    #                                                        direction, gamma)
-    #     assert majorized(pareto_point, gamma), "Projection went wrong, new point is out of the hedron."
-    #     pareto_set.append(pareto_point)
-    #     # break
-
     while True:
         nb_iteration += 1
         # print(nb_iteration)
-        initiate_fair_point = initiate_fair_point + step * optimal_fairness_direction
-        initiate_fair_point = initiate_fair_point / np.sum(initiate_fair_point) * np.sum(gamma)
-        if not majorized(initiate_fair_point, gamma):
+        start_point = initiate_fair_point + (nb_iteration * step) * optimal_fairness_direction
+        start_point = start_point / np.sum(start_point) * np.sum(gamma)
+        if not majorized(start_point, gamma):
             break
-        pareto_point = optimal_utility_point_in_fair_level(initiate_fair_point, item_group_masking,
+        pareto_point = optimal_utility_point_in_fair_level(start_point, item_group_masking,
                                                            direction, gamma)
         assert majorized(pareto_point, gamma), "Projection went wrong, new point is out of the hedron."
         pareto_set.append(pareto_point)
         # break
+
+    # while True:
+    #     nb_iteration += 1
+    #     # print(nb_iteration)
+    #     initiate_fair_point = initiate_fair_point + step * optimal_fairness_direction
+    #     initiate_fair_point = initiate_fair_point / np.sum(initiate_fair_point) * np.sum(gamma)
+    #     if not majorized(initiate_fair_point, gamma):
+    #         break
+    #     pareto_point = optimal_utility_point_in_fair_level(initiate_fair_point, item_group_masking,
+    #                                                        direction, gamma)
+    #     assert majorized(pareto_point, gamma), "Projection went wrong, new point is out of the hedron."
+    #     pareto_set.append(pareto_point)
+    #     # break
 
     pareto_set.append(end_point)
 
@@ -153,22 +194,22 @@ def load_data():
     # relevance_score = np.asarray([0.7, 0.8, 1, 0.4])
     # item_group_masking = np.asarray([[0, 1], [0, 1], [1, 0], [1, 0]])
 
-    relevance_score = np.loadtxt("data_error/relevance_score.csv", delimiter=",").astype(np.double)
-    item_group_masking = np.loadtxt("data_error/item_group.csv", delimiter=",").astype(np.double)
-    n_doc = item_group_masking.shape[0]
+    # relevance_score = np.loadtxt("data_error/relevance_score.csv", delimiter=",").astype(np.double)
+    # item_group_masking = np.loadtxt("data_error/item_group.csv", delimiter=",").astype(np.double)
+    # n_doc = item_group_masking.shape[0]
 
-    # n_doc = 40
-    # n_group = 3
+    n_doc = 40
+    n_group = 3
     
-    # np.random.seed(n_doc)
-    # relevance_score = np.random.rand(n_doc)
-    # # np.savetxt("data_error/relevance_score.csv", relevance_score, delimiter=",")
+    np.random.seed(n_doc)
+    relevance_score = np.random.rand(n_doc)
+    # np.savetxt("data_error/relevance_score.csv", relevance_score, delimiter=",")
     
-    # item_group_masking = np.zeros((n_doc, n_group))
-    # for i in range(n_doc):
-    #     j = np.random.randint(n_group, size=1)
-    #     item_group_masking[i][j[0]] = 1
-    # # np.savetxt("data_error/item_group.csv", item_group_masking, delimiter=",")
+    item_group_masking = np.zeros((n_doc, n_group))
+    for i in range(n_doc):
+        j = np.random.randint(n_group, size=1)
+        item_group_masking[i][j[0]] = 1
+    # np.savetxt("data_error/item_group.csv", item_group_masking, delimiter=",")
 
     gamma = 1 / np.log(np.arange(0, n_doc) + 2)
     group_size = item_group_masking.sum(axis=0)
