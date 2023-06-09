@@ -39,7 +39,7 @@ class Face:
         :rtype: bool
         """
         # majorization condition
-        maj = majorized(point, self.gamma)  
+        maj = majorized(point, self.gamma, tolerance)  
         # Check if the splits of `point` are a subset of `self.splits`
         face_condition: bool = len(np.setdiff1d(self.splits, np.where(np.abs(np.cumsum(point[self.zone]) - np.cumsum(self.gamma)) < tolerance)[0])) == 0  
         # print(maj, " ", face_condition)

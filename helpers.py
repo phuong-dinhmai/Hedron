@@ -76,7 +76,7 @@ def majorized(majorized_vector: np.array, majorizing_vector: np.array, tolerance
         :return: `True` if a < b, false otherwise
         :rtype: bool
     """
-    # print(np.cumsum(-np.sort(-majorized_vector)) <= np.cumsum(-np.sort(-majorizing_vector)) + tolerance)
+    # print(np.cumsum(-np.sort(-majorized_vector)) - np.cumsum(-np.sort(-majorizing_vector)))
     # print(np.abs(np.sum(majorized_vector) - np.sum(majorizing_vector)))
     return np.all(np.cumsum(-np.sort(-majorized_vector)) <= np.cumsum(-np.sort(-majorizing_vector)) + tolerance) \
            and np.abs(np.sum(majorized_vector) - np.sum(majorizing_vector)) < tolerance
@@ -102,14 +102,14 @@ def orthogonal_complement(x: np.ndarray, threshold: float = LOW_TOLERANCE):
         :rtype: np.ndarray
     """
     x = np.asarray(x)
-    x = orth(x)
-    r, c = x.shape
+    _x = orth(x)
+    r, c = _x.shape
     if r < c:
         import warnings
         warnings.warn('fewer rows than columns', UserWarning)
 
     # we assume svd is ordered by decreasing singular value, o.w. need sort
-    s, v, d = np.linalg.svd(x)
+    s, v, d = np.linalg.svd(_x)
     rank = (v > threshold).sum()
 
     oc = s[:, rank:]
@@ -194,7 +194,7 @@ def intersect_vector_space(orthogonal_space_1: np.ndarray, orthogonal_space_2: n
     """
     P_u = projection_matrix_on_subspace(orthogonal_space_1)
     P_v = projection_matrix_on_subspace(orthogonal_space_2)
-    return orthogonal_complement(orth(P_u @ P_v - np.identity(orthogonal_space_1.shape[0])))
+    return orthogonal_complement(orth(P_u @ P_v - np.eye(orthogonal_space_1.shape[0])))
     # return null_space(orth(P_u @ P_v - np.identity(orthogonal_space_1.shape[0])))
 
 
