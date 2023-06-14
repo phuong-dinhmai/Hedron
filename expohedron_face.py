@@ -1,12 +1,12 @@
 import numpy as np
 from scipy.linalg import orth
 
-from helpers import majorized, invert_permutation, project_point_onto_plane
+from helpers import majorized, invert_permutation
 
 ULTRA_LOW_TOLERANCE = 5e-3
 LOW_TOLERANCE = 1e-6
 DEFAULT_TOLERANCE = 1e-9
-HIGH_TOLERANCE = 1e-15
+HIGH_TOLERANCE = 1e-13
 MAX_TOLERANCE = 2.220446049250313e-16 
 
 
@@ -104,12 +104,4 @@ def identify_face(gamma: np.ndarray, point_on_face: np.ndarray, tolerance = LOW_
 
     splits = np.where(np.abs(np.cumsum(np.sort(gamma)) - np.cumsum(np.sort(point_on_face))) < tolerance)
     return Face(gamma, np.argsort(point_on_face), splits[0])
-
-
-def post_correction(face, point_on_face):
-    vertex_of_face = face.gamma[invert_permutation(face.zone)]
-    face_subspace = find_face_subspace_without_parent(face)
-    projected_point = project_point_onto_plane(point_on_face, face_subspace, face_subspace.T @ vertex_of_face)
-    assert face.contains(projected_point), "There has been an error in the projection on a face's subspace"
-    return projected_point
 
