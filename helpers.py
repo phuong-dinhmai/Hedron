@@ -1,8 +1,11 @@
 import numpy as np
 from scipy.linalg import orth
 
-LOW_TOLERANCE = 1e-12
-HIGH_TOLERANCE = 1e-10
+ULTRA_LOW_TOLERANCE = 5e-3
+LOW_TOLERANCE = 1e-6
+DEFAULT_TOLERANCE = 1e-9
+HIGH_TOLERANCE = 1e-15
+MAX_TOLERANCE = 2.220446049250313e-16 
 
 
 def check_orthogonal_vector(vector: np.ndarray, basis_space: np.ndarray):
@@ -63,7 +66,7 @@ def invert_permutation(permutation):
     return np.argsort(permutation)
 
 
-def majorized(majorized_vector: np.array, majorizing_vector: np.array, tolerance: float = HIGH_TOLERANCE) -> bool:
+def majorized(majorized_vector: np.array, majorizing_vector: np.array, tolerance: float = LOW_TOLERANCE) -> bool:
     """
         Checks whether `a` is majorized by `b`: a<b
 
@@ -76,7 +79,7 @@ def majorized(majorized_vector: np.array, majorizing_vector: np.array, tolerance
         :return: `True` if a < b, false otherwise
         :rtype: bool
     """
-    # print(np.cumsum(-np.sort(-majorized_vector)) <= np.cumsum(-np.sort(-majorizing_vector)) + tolerance)
+    # print(np.cumsum(-np.sort(-majorized_vector)) - np.cumsum(-np.sort(-majorizing_vector)))
     # print(np.abs(np.sum(majorized_vector) - np.sum(majorizing_vector)))
     return np.all(np.cumsum(-np.sort(-majorized_vector)) <= np.cumsum(-np.sort(-majorizing_vector)) + tolerance) \
            and np.abs(np.sum(majorized_vector) - np.sum(majorizing_vector)) < tolerance
@@ -89,7 +92,7 @@ def projection_matrix_on_subspace(U: np.ndarray):
     return U @ np.linalg.inv(U.T @ U) @ U.T
 
 
-def orthogonal_complement(x: np.ndarray, threshold: float = LOW_TOLERANCE):
+def orthogonal_complement(x: np.ndarray, threshold: float = 1e-12):
     """
         Compute orthogonal complement of a matrix
 
@@ -102,21 +105,21 @@ def orthogonal_complement(x: np.ndarray, threshold: float = LOW_TOLERANCE):
         :rtype: np.ndarray
     """
     x = np.asarray(x)
-    x = orth(x)
-    r, c = x.shape
+    _x = orth(x)
+    r, c = _x.shape
     if r < c:
         import warnings
         warnings.warn('fewer rows than columns', UserWarning)
 
     # we assume svd is ordered by decreasing singular value, o.w. need sort
-    s, v, d = np.linalg.svd(x)
+    s, v, d = np.linalg.svd(_x)
     rank = (v > threshold).sum()
 
     oc = s[:, rank:]
     return oc
 
 
-def matrix_linear_independence(x: np.ndarray, threshold: float = LOW_TOLERANCE):
+def matrix_linear_independence(x: np.ndarray, threshold: float = 1e-12):
     """
         Reduce matrix rows to create vectors independent linear matrix
 
@@ -194,12 +197,12 @@ def intersect_vector_space(orthogonal_space_1: np.ndarray, orthogonal_space_2: n
     """
     P_u = projection_matrix_on_subspace(orthogonal_space_1)
     P_v = projection_matrix_on_subspace(orthogonal_space_2)
-    return orthogonal_complement(orth(P_u @ P_v - np.identity(orthogonal_space_1.shape[0])))
+    return orthogonal_complement(orth(P_u @ P_v - np.eye(orthogonal_space_1.shape[0])))
     # return null_space(orth(P_u @ P_v - np.identity(orthogonal_space_1.shape[0])))
 
 
 def find_face_intersection_bisection(gamma: np.ndarray, starting_point: np.ndarray,
-                                     direction: np.ndarray, precision: float = LOW_TOLERANCE) -> np.ndarray:
+                                     direction: np.ndarray, precision: float = 1e-12) -> np.ndarray:
     """
         Executes a bisection search in the PBM-expohedron using the majorization criterion.
 
@@ -221,49 +224,46 @@ def find_face_intersection_bisection(gamma: np.ndarray, starting_point: np.ndarr
     assert n == len(direction), "`direction` does not have the same length as `gamma`."
     assert majorized(starting_point, gamma), "`starting_point` needs to be majorized by `gamma`. Check your inputs or decrease majorization tolerance."
 
-    # direction = direction / np.linalg.norm(direction)  # normalize direction
-    # 1. Find upper and lower bound
-    k = 1
+    # If point and direction are in the same zone
+    if np.all(np.argsort(starting_point) == np.argsort(direction)):
+        zone = np.argsort(starting_point)
+        Gk = np.cumsum(np.sort(gamma))
+        Sk = np.cumsum(starting_point[zone])
+        Dk = np.cumsum(direction[zone])
+        # eliminate the coordinates where Dk is zero; no information about Lambda can be obtained from them. todo: refer to a proof in paper
 
-    while majorized((starting_point + k*direction) / np.sum((starting_point + k*direction)) * np.sum(gamma), gamma):
-        # We make sure the tested point is in the hyperplane containing the expohedron
-        # The division phase is for point projection to expohedron
-        k *= 2
+        # Lambda = min((Gk - Sk)[0:(n - 1)] / Dk[0:(n - 1)])
+        indices = np.where(np.abs(Dk) > 1e-12)
+        bounds = (Gk - Sk)[indices] / Dk[indices]
+        Lambda = min(bounds[np.where(bounds >= 0)], default=0)
 
-    # upper_bound = k
-    # lower_bound = 0
+        return starting_point + Lambda * direction
+    else:
+        # Start binary search
+        # 1. Find upper and lower bound
+        k = 1
 
-    # # 2. Do bisection
-    # nb_iterations = 0
-    # while True:
-    #     nb_iterations += 1
-    #     center = (upper_bound + lower_bound) / 2.0
-    #     point = (starting_point + center*direction) / np.sum((starting_point + center*direction)) * np.sum(gamma)
-    #     if majorized(point, gamma, tolerance=precision):  # project center on face's affine subspace
-    #         lower_bound = center
-    #     else:
-    #         upper_bound = center
-    #     if (upper_bound - lower_bound) < precision:
-    #         return (starting_point + lower_bound*direction) / np.sum((starting_point + lower_bound*direction)) * np.sum(gamma)
-    #     else:
-    #         pass
+        while majorized((starting_point + k*direction) / np.sum((starting_point + k*direction)) * np.sum(gamma), gamma):
+            # We make sure the tested point is in the hyperplane containing the expohedron
+            # The division phase is for point projection to expohedron
+            k *= 2
 
-    upper_bound = (starting_point + k*direction) / np.sum((starting_point + k*direction)) * np.sum(gamma)
-    lower_bound = starting_point
+        upper_bound = (starting_point + k*direction) / np.sum((starting_point + k*direction)) * np.sum(gamma)
+        lower_bound = starting_point
 
-    # 2. Do bisection
-    nb_iterations = 0
-    while True:
-        nb_iterations += 1
-        center = (upper_bound + lower_bound) / 2
-        if majorized(center, gamma, tolerance=precision):  # project center on face's affine subspace
-            lower_bound = center
-        else:
-            upper_bound = center
-        if np.all(np.abs(upper_bound - lower_bound) < precision):
-            return lower_bound
-        else:
-            pass
+        # 2. Do bisection
+        nb_iterations = 0
+        while True:
+            nb_iterations += 1
+            center = (upper_bound + lower_bound) / 2
+            if majorized(center, gamma, tolerance=precision):  # project center on face's affine subspace
+                lower_bound = center
+            else:
+                upper_bound = center
+            if np.all(np.abs(upper_bound - lower_bound) < precision):
+                return lower_bound
+            else:
+                pass
 
 
 if __name__ == "__main__":

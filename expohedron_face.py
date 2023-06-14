@@ -3,8 +3,11 @@ from scipy.linalg import orth
 
 from helpers import majorized, invert_permutation, project_point_onto_plane
 
-LOW_TOLERANCE = 1e-12
-HIGH_TOLERANCE = 1e-10
+ULTRA_LOW_TOLERANCE = 5e-3
+LOW_TOLERANCE = 1e-6
+DEFAULT_TOLERANCE = 1e-9
+HIGH_TOLERANCE = 1e-15
+MAX_TOLERANCE = 2.220446049250313e-16 
 
 
 class Face:
@@ -31,7 +34,7 @@ class Face:
         self.splits = splits
         self.dim = n - len(splits)
 
-    def contains(self, point: np.array, tolerance: float = HIGH_TOLERANCE) -> bool:
+    def contains(self, point: np.array, tolerance: float = LOW_TOLERANCE) -> bool:
         """
             Checks if a point is inside the face
         :param point:
@@ -79,7 +82,7 @@ def find_face_subspace_without_parent(face: Face) -> np.ndarray:
     return orth(A.T)
 
 
-def identify_face(gamma: np.ndarray, point_on_face: np.ndarray, tolerance: float = LOW_TOLERANCE) -> Face:
+def identify_face(gamma: np.ndarray, point_on_face: np.ndarray, tolerance = LOW_TOLERANCE) -> Face:
     """
         Computes the smallest face of the `gamma`-PBM-expohedron of which `point` is situated
 
