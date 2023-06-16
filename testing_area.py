@@ -14,14 +14,14 @@ from evaluation import evaluate_probabilty
 import QP
 
 
-HIGH_TOLERANCE = 1e-13
+HIGH_TOLERANCE = 1e-12
 
 
 def draw(a, b):
     a = np.asarray(a)
     b = np.asarray(b)
     # b = b[b[:, 1].argsort()]
-    # a = a[a[:, 1].argsort()]
+    a = a[a[:, 1].argsort()]
 
     plt.plot(b[:, 1], b[:, 0], label="QP")
     plt.plot(a[:, 1], a[:, 0], label="Hedron")
@@ -37,7 +37,7 @@ def optimal_utility_point_in_fair_level(start_point: np.ndarray, complement_basi
     current_direction = project_on_vector_space(direction, complement_basis.T)
     # current_direction = direction
     previous_face = identify_face(gamma, current_point)
-    previous_utils = np.sum(np.dot(start_point, direction))
+    previous_utils = direction @ start_point
     # basis_orth = null_space(complement_basis.T, HIGH_TOLERANCE)
     # complement_basis = null_space(basis_orth.T, HIGH_TOLERANCE)
     # _b_base = complement_basis.T @ start_point
@@ -47,7 +47,7 @@ def optimal_utility_point_in_fair_level(start_point: np.ndarray, complement_basi
     while True:
 
         current_point = find_face_intersection_bisection(gamma, current_point, current_direction)
-        current_utils = np.sum(np.dot(current_point, direction))
+        current_utils = direction @ current_point
         current_face = identify_face(gamma, current_point)
 
         if not previous_face.dim >= current_face.dim:
@@ -82,7 +82,7 @@ def optimal_utility_point_in_fair_level(start_point: np.ndarray, complement_basi
         current_direction = project_on_vector_space(direction, current_search_faces.T)
         previous_utils = current_utils
 
-    return current_point
+    return current_point, current_utils
 
 
 def example(relevance_score: np.ndarray, item_group_masking: np.ndarray, group_fairness: np.ndarray, gamma: np.ndarray):
@@ -91,13 +91,13 @@ def example(relevance_score: np.ndarray, item_group_masking: np.ndarray, group_f
     expohedron_complement = np.asarray([[1.0] * n_doc])
     expohedron_basis = null_space(expohedron_complement, HIGH_TOLERANCE)
 
-    print("Fairness_level_direction_space")
+    # print("Fairness_level_direction_space")
     # Since the vector space is orthogonal with a subspace in the expohedron space
     # The intersection space will also be the projection space
     fairness_level_projection_space = intersect_vector_space(expohedron_basis, item_group_masking)
 
     # Random point in fairness surface
-    print('Initiate point')
+    # print('Initiate point')
     initiate_fair_point = np.asarray([gamma.sum() / n_doc] * n_doc)
     initiate_fair_point = project_point_on_plane(initiate_fair_point, item_group_masking, group_fairness)
     assert majorized(initiate_fair_point, gamma), "Initiate point is not in the expohedron"
@@ -105,7 +105,7 @@ def example(relevance_score: np.ndarray, item_group_masking: np.ndarray, group_f
     end_point = gamma[invert_permutation(np.argsort(-relevance_score))]
     end_fairness = np.sum((item_group_masking.T @ end_point - group_fairness) ** 2)
    
-    print("Optimal_fairness_direction")
+    # print("Optimal_fairness_direction")
     fixed_direction = project_vector_on_subspace(relevance_score,
                                                 fairness_level_projection_space)
     # Post-correction optimal fairness level direction in case starting point is in opposite direction with relevance direction
@@ -113,13 +113,17 @@ def example(relevance_score: np.ndarray, item_group_masking: np.ndarray, group_f
 
     direction = relevance_score
 
-    print("Start search for pareto front")
+    # print("Start search for pareto front")
     pareto_set = []
-    pareto_point = optimal_utility_point_in_fair_level(initiate_fair_point, item_group_masking,
+    objectives = []
+    pareto_point, utils = optimal_utility_point_in_fair_level(initiate_fair_point, item_group_masking,
                                                        direction, gamma)
     pareto_set.append(pareto_point)
+    objectives.append([utils, 0])
+    pareto_set.append(end_point)
+    objectives.append([relevance_score @ end_point, end_fairness])
 
-    step = 0.1
+    step = 0.2
     nb_iteration = 0
 
     while True:
@@ -127,21 +131,17 @@ def example(relevance_score: np.ndarray, item_group_masking: np.ndarray, group_f
         initiate_fair_point = initiate_fair_point + step * optimal_fairness_direction
         if not majorized(initiate_fair_point, gamma):
             break
-        pareto_point = optimal_utility_point_in_fair_level(initiate_fair_point, item_group_masking,
+        pareto_point, user_utilities = optimal_utility_point_in_fair_level(initiate_fair_point, item_group_masking,
                                                            direction, gamma)
         assert majorized(pareto_point, gamma), "Projection went wrong, new point is out of the hedron."
+
+        unfairness = np.sum((item_group_masking.T @ pareto_point- group_fairness) ** 2)
         pareto_set.append(pareto_point)
-
-    objectives = []
-
-    print("Objective evaluation")
-    for exposure in pareto_set:
-        user_utilities = np.sum(relevance_score.T @ exposure)
-        unfairness = np.sum((item_group_masking.T @ exposure - group_fairness) ** 2)
-
         objectives.append([user_utilities, unfairness])
-    print(objectives)
-    objectives = [ele for ele in objectives if ele[1] <= end_fairness]
+
+        if unfairness > end_fairness:
+            break
+
     return objectives
 
 
@@ -155,8 +155,8 @@ def load_data():
     # item_group_masking = np.loadtxt("data_error/item_group.csv", delimiter=",").astype(np.double)
     # n_doc = item_group_masking.shape[0]
 
-    n_doc = 40
-    n_group = 2
+    n_doc = 100
+    n_group = 6
 
     np.random.seed(n_doc)
     relevance_score = np.random.rand(n_doc)
