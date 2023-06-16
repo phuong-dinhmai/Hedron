@@ -22,10 +22,10 @@ class QP:
         
         n_doc, n_group = item_list.shape
         self.gamma = 1 / np.log(np.arange(0, n_doc) + 2) #the DCG exposure
-        self.gamma = self.gamma.reshape([n_doc, 1])
 
         group_size = item_list.sum(axis=0)
         self.fair_exposure = group_size / np.sum(group_size) * np.sum(self.gamma)
+        self.gamma = self.gamma.reshape([n_doc, 1])
         self.fair_exposure = self.fair_exposure.reshape([n_group, 1])
         # print(self.fair_exposure)
 
@@ -66,7 +66,7 @@ def experiment(relevance_score, item_list):
     for point in pareto_set:
         objecties = evaluate_probabilty(point, relevance_score, item_list)
         pareto_front.append(objecties)
-    print(pareto_front)
+    # print(pareto_front)
     return pareto_front
 
 

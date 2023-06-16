@@ -1,10 +1,11 @@
 import numpy as np
-from scipy.linalg import orth
+from scipy.linalg import orth, null_space
+import time
 
 ULTRA_LOW_TOLERANCE = 5e-3
 LOW_TOLERANCE = 1e-6
 DEFAULT_TOLERANCE = 1e-9
-HIGH_TOLERANCE = 1e-15
+HIGH_TOLERANCE = 1e-13
 MAX_TOLERANCE = 2.220446049250313e-16 
 
 
@@ -92,60 +93,6 @@ def projection_matrix_on_subspace(U: np.ndarray):
     return U @ np.linalg.inv(U.T @ U) @ U.T
 
 
-def orthogonal_complement(x: np.ndarray, threshold: float = 1e-12):
-    """
-        Compute orthogonal complement of a matrix
-
-        This works along axis zero, i.e. rank == column rank, or number of rows > column rank otherwise orthogonal complement is empty
-        :param x: the matrix need to find the orthogonal complement
-        :type x: numpy.ndarray
-        :param threshold: the tolerance that is allowed
-        :type threshold: float
-        :return: List of orthogonal vector of the complement if have, None otherwise
-        :rtype: np.ndarray
-    """
-    x = np.asarray(x)
-    _x = orth(x)
-    r, c = _x.shape
-    if r < c:
-        import warnings
-        warnings.warn('fewer rows than columns', UserWarning)
-
-    # we assume svd is ordered by decreasing singular value, o.w. need sort
-    s, v, d = np.linalg.svd(_x)
-    rank = (v > threshold).sum()
-
-    oc = s[:, rank:]
-    return oc
-
-
-def matrix_linear_independence(x: np.ndarray, threshold: float = 1e-12):
-    """
-        Reduce matrix rows to create vectors independent linear matrix
-
-        This works along axis zero, i.e. rank == column rank, or number of rows > column rank otherwise matrix returned is empty
-        :param x: the matrix need to find the vectors independent linear
-        :type x: numpy.ndarray
-        :param threshold: the tolerance that is allowed
-        :type threshold: float
-        :return: List of independent linear vector of the complement if have, None otherwise
-        :rtype: np.ndarray
-    """
-    x = np.asarray(x)
-    x = orth(x)
-    r, c = x.shape
-    if r < c:
-        import warnings
-        warnings.warn('fewer rows than columns', UserWarning)
-
-    # we assume svd is ordered by decreasing singular value, o.w. need sort
-    s, v, d = np.linalg.svd(x)
-    rank = (v > threshold).sum()
-
-    oc = s[:, :rank]
-    return oc
-
-
 def project_vector_on_subspace(direction: np.ndarray, subspace_matrix: np.ndarray):
     """
         Compute vector projection in any subspace when the orthorgonal vector of the subspace is known
@@ -157,14 +104,29 @@ def project_vector_on_subspace(direction: np.ndarray, subspace_matrix: np.ndarra
         :return: The projection of the direction vector in the subspace 
         :rtype: numpy.ndarray (1D)   
     """
-    res = np.zeros(direction.shape)
-    for orth_vector in subspace_matrix.T:
-        param = np.dot(direction, orth_vector) / np.dot(orth_vector, orth_vector)
-        res += param * orth_vector
+    param = direction @ subspace_matrix
+    res = (param * subspace_matrix).sum(axis=1)
+    res[np.abs(res) < HIGH_TOLERANCE] = 0
     return res
 
 
-def project_point_onto_plane(point: np.ndarray, A: np.ndarray, b: np.ndarray):
+def project_on_vector_space(point_to_project: np.ndarray, normal_vectors: np.ndarray) -> np.array:
+    """
+        Given an (m x n)-matrix `A`, this function computes the projection of `point_to_project` onto the linear subspace S = {x in R^n | Ax = 0}.
+
+        The rows of matrix `A` are vectors orthogonal to the subspace
+    :param point_to_project: The point to project on the linear subspace
+    :type point_to_project: numpy.ndarray
+    :param normal_vectors: A matrix whose rows are normal vectors to the subspace
+    :return:
+    """
+    n = normal_vectors.shape[1]
+    assert n == len(point_to_project), "The normal vectors must have the same dimension as the `point_to_project`"
+    P = orth(normal_vectors.T)
+    return point_to_project - P @ (P.T @ point_to_project)
+
+
+def project_point_on_plane(point: np.ndarray, A: np.ndarray, b: np.ndarray):
     """
         Compute point projection in any subspace when the multiply matrix and constants is know
 
@@ -195,10 +157,13 @@ def intersect_vector_space(orthogonal_space_1: np.ndarray, orthogonal_space_2: n
         :param orthogonal_space_1: Basis vectors of the first vector space (column is the basis vector)
         :param orthogonal_space_2: Basis vectors of the second vector space (column is the basis vector)
     """
-    P_u = projection_matrix_on_subspace(orthogonal_space_1)
-    P_v = projection_matrix_on_subspace(orthogonal_space_2)
-    return orthogonal_complement(orth(P_u @ P_v - np.eye(orthogonal_space_1.shape[0])))
-    # return null_space(orth(P_u @ P_v - np.identity(orthogonal_space_1.shape[0])))
+    A = np.concatenate((orthogonal_space_1, -orthogonal_space_2), axis=1)
+    A_comple = null_space(A, DEFAULT_TOLERANCE)
+    if A_comple.shape[1] == 0:
+        return A_comple
+    # return orthogonal_space_1 @ A_comple[:orthogonal_space_1.shape[1], :]
+    return orth(orthogonal_space_2 @ A_comple[orthogonal_space_1.shape[1]:, :])
+
 
 
 def find_face_intersection_bisection(gamma: np.ndarray, starting_point: np.ndarray,
@@ -261,14 +226,23 @@ def find_face_intersection_bisection(gamma: np.ndarray, starting_point: np.ndarr
             else:
                 upper_bound = center
             if np.all(np.abs(upper_bound - lower_bound) < precision):
-                return lower_bound
+                return lower_bound 
             else:
                 pass
 
 
 if __name__ == "__main__":
-    U = np.asarray([(1,1,0,-1), (0,1,3,1)]).T
-    V = np.asarray([(0,-1,-2,1), (1,2,2,-2)]).T
-    print(U.T @ V)
-    intersection_vector_space = intersect_vector_space(U, V)
-    print(intersection_vector_space)
+    U = np.asarray([(1,1,0,-1), (0,1,3,1)])
+    V = np.asarray([(0,-1,-2,1), (1,2,2,-2)])
+    # intersection_vector_space = intersect_vector_space(U.T, V.T)
+    # print(intersection_vector_space)
+    start = time.time()
+    project_vector_on_subspace(U[0], V.T)
+    end = time.time()
+    print(end - start)
+    _V = null_space(V)
+    start = time.time()
+    project_on_vector_space(U[0], _V.T)
+    end = time.time()
+    print(end - start)
+
