@@ -34,7 +34,7 @@ class Face:
         self.splits = splits
         self.dim = n - len(splits)
 
-    def contains(self, point: np.array, tolerance: float = LOW_TOLERANCE) -> bool:
+    def contains(self, point: np.array, tolerance: float = DEFAULT_TOLERANCE) -> bool:
         """
             Checks if a point is inside the face
         :param point:

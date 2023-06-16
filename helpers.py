@@ -158,9 +158,11 @@ def intersect_vector_space(orthogonal_space_1: np.ndarray, orthogonal_space_2: n
         :param orthogonal_space_2: Basis vectors of the second vector space (column is the basis vector)
     """
     A = np.concatenate((orthogonal_space_1, -orthogonal_space_2), axis=1)
-    A_comple = null_space(A)
+    A_comple = null_space(A, DEFAULT_TOLERANCE)
+    if A_comple.shape[1] == 0:
+        return A_comple
     # return orthogonal_space_1 @ A_comple[:orthogonal_space_1.shape[1], :]
-    return orthogonal_space_2 @ A_comple[orthogonal_space_1.shape[1]:, :]
+    return orth(orthogonal_space_2 @ A_comple[orthogonal_space_1.shape[1]:, :])
 
 
 
@@ -224,7 +226,7 @@ def find_face_intersection_bisection(gamma: np.ndarray, starting_point: np.ndarr
             else:
                 upper_bound = center
             if np.all(np.abs(upper_bound - lower_bound) < precision):
-                return lower_bound
+                return lower_bound 
             else:
                 pass
 
@@ -240,7 +242,7 @@ if __name__ == "__main__":
     print(end - start)
     _V = null_space(V)
     start = time.time()
-    project_on_subspace(U[0], _V.T)
+    project_on_vector_space(U[0], _V.T)
     end = time.time()
     print(end - start)
 
