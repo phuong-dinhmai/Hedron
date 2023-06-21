@@ -99,7 +99,7 @@ def project_vector_on_subspace(direction: np.ndarray, subspace_matrix: np.ndarra
 
         :param direction: the 1D vector need to find the projection 
         :type direction: numpy.array
-        :param subspace_matrix: the matrix of othorgonal vector represent the subspace (each row is an vector)
+        :param subspace_matrix: the matrix of othorgonal vector represent the subspace (each column is an vector)
         :type subspace_matrix: numpy.ndarray
         :return: The projection of the direction vector in the subspace 
         :rtype: numpy.ndarray (1D)   
