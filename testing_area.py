@@ -80,7 +80,7 @@ def example(relevance_score: np.ndarray, item_group_masking: np.ndarray, group_f
         if not majorized(starting_point, gamma):
             print(nb_iteration)
             break
-
+        b = item_group_masking.T @ starting_point
         pareto_point = convex_constraints_prob(relevance_score, item_group_masking, gamma, b)
         assert majorized(pareto_point, gamma), "Projection went wrong, new point is out of the hedron."
 
