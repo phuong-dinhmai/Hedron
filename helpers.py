@@ -104,9 +104,12 @@ def project_vector_on_subspace(direction: np.ndarray, subspace_matrix: np.ndarra
         :return: The projection of the direction vector in the subspace 
         :rtype: numpy.ndarray (1D)   
     """
-    param = direction @ subspace_matrix
-    res = (param * subspace_matrix).sum(axis=1)
-    res[np.abs(res) < HIGH_TOLERANCE] = 0
+    param = projection_matrix_on_subspace(subspace_matrix)
+    res = direction @ param
+    # subspace_matrix = orth(subspace_matrix)
+    # param = direction @ subspace_matrix
+    # res = (param * subspace_matrix).sum(axis=1)
+    # res[np.abs(res) < HIGH_TOLERANCE] = 0
     return res
 
 
@@ -123,6 +126,7 @@ def project_on_vector_space(point_to_project: np.ndarray, normal_vectors: np.nda
     n = normal_vectors.shape[1]
     assert n == len(point_to_project), "The normal vectors must have the same dimension as the `point_to_project`"
     P = orth(normal_vectors.T)
+    # P = normal_vectors.T
     return point_to_project - P @ (P.T @ point_to_project)
 
 
@@ -158,12 +162,11 @@ def intersect_vector_space(orthogonal_space_1: np.ndarray, orthogonal_space_2: n
         :param orthogonal_space_2: Basis vectors of the second vector space (column is the basis vector)
     """
     A = np.concatenate((orthogonal_space_1, -orthogonal_space_2), axis=1)
-    A_comple = null_space(A, DEFAULT_TOLERANCE)
+    A_comple = null_space(A, HIGH_TOLERANCE)
     if A_comple.shape[1] == 0:
         return A_comple
     # return orthogonal_space_1 @ A_comple[:orthogonal_space_1.shape[1], :]
     return orth(orthogonal_space_2 @ A_comple[orthogonal_space_1.shape[1]:, :])
-
 
 
 def find_face_intersection_bisection(gamma: np.ndarray, starting_point: np.ndarray,
