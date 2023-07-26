@@ -1,15 +1,13 @@
 import matplotlib.pyplot as plt
 import numpy as np
 import time
-from scipy.linalg import null_space, orth
-import random
+from scipy.linalg import null_space
+import cvxpy as cp
 
-from helpers import project_vector_on_subspace, project_on_vector_space, project_point_on_plane
-from helpers import majorized, find_face_intersection_bisection, invert_permutation, intersect_vector_space
-from expohedron_face import identify_face, find_face_subspace_without_parent
+from helpers import project_vector_on_subspace, project_point_on_plane
+from helpers import majorized, invert_permutation, intersect_vector_space
 
 from expohedron import caratheodory_decomposition_pbm_gls
-from evaluation import evaluate_probabilty
 
 import QP
 
@@ -21,7 +19,7 @@ def draw(a, b):
     a = np.asarray(a)
     b = np.asarray(b)
     # b = b[b[:, 1].argsort()]
-    a = a[a[:, 1].argsort()]
+    # a = a[a[:, 1].argsort()]
 
     plt.plot(b[:, 1], b[:, 0], label="QP")
     plt.plot(a[:, 1], a[:, 0], label="Hedron")
@@ -31,118 +29,85 @@ def draw(a, b):
     plt.show()
 
 
-def optimal_utility_point_in_fair_level(start_point: np.ndarray, complement_basis: np.ndarray,
-                                        direction: np.ndarray, gamma: np.ndarray):
-    current_point = start_point
-    current_direction = project_on_vector_space(direction, complement_basis.T)
-    # current_direction = direction
-    previous_face = identify_face(gamma, current_point)
-    previous_utils = direction @ start_point
-    # basis_orth = null_space(complement_basis.T, HIGH_TOLERANCE)
-    # complement_basis = null_space(basis_orth.T, HIGH_TOLERANCE)
-    # _b_base = complement_basis.T @ start_point
-    # k = 0
-    n_doc = start_point.shape[0]
-
-    while True:
-
-        current_point = find_face_intersection_bisection(gamma, current_point, current_direction)
-        current_utils = direction @ current_point
-        current_face = identify_face(gamma, current_point)
-
-        if not previous_face.dim >= current_face.dim:
-            # return current_point
-            raise Exception("if not face.dim < current_dim", "A precision error is likely to have occurred")
-
-        # Post-correction
-        face_complement = find_face_subspace_without_parent(current_face)
-        # face_orth = null_space(face_complement.T)
-        vertex_of_face = current_face.gamma[invert_permutation(current_face.zone)]
-
-        # current_search_faces = intersect_vector_space(face_orth, basis_orth)
-        current_search_faces = orth(np.concatenate([face_complement, complement_basis], axis=1))
-
-        if current_search_faces.shape[1] == n_doc:
-            break
-
-        if  previous_utils >= current_utils : # and np.abs(previous_utils - current_utils) > 1e-12:
-            print(previous_face.dim)
-            print("--------------")
-            break
-
-        # A = np.concatenate((face_complement, complement_basis), axis=1)
-        # b = np.concatenate((face_complement.T @ vertex_of_face, _b_base), axis=0)
-        # current_point = project_point_on_plane(current_point, A, b)
-        # current_point = project_point_on_plane(current_point, face_complement, face_complement.T @ vertex_of_face)
-        current_point = project_on_vector_space(current_point - vertex_of_face, face_complement.T) + vertex_of_face
-        assert current_face.contains(current_point), "Float point error"
-
-        previous_face = current_face
-        # current_direction = project_vector_on_subspace(direction, current_search_faces)
-        current_direction = project_on_vector_space(direction, current_search_faces.T)
-        previous_utils = current_utils
-
-    return current_point, current_utils
-
-
 def example(relevance_score: np.ndarray, item_group_masking: np.ndarray, group_fairness: np.ndarray, gamma: np.ndarray):
     n_doc = item_group_masking.shape[0]
+    n_group = item_group_masking.shape[1]
 
     expohedron_complement = np.asarray([[1.0] * n_doc])
     expohedron_basis = null_space(expohedron_complement, HIGH_TOLERANCE)
+    group_dict = [[] for j in range(n_group)]
+    for i in range(n_doc):
+        g = np.where(item_group_masking[i, :] == 1)[0][0]
+        group_dict[g].append(i)
 
-    # print("Fairness_level_direction_space")
+    print("Fairness_level_direction_space")
     # Since the vector space is orthogonal with a subspace in the expohedron space
     # The intersection space will also be the projection space
     fairness_level_projection_space = intersect_vector_space(expohedron_basis, item_group_masking)
 
     # Random point in fairness surface
-    # print('Initiate point')
-    initiate_fair_point = np.asarray([gamma.sum() / n_doc] * n_doc)
-    initiate_fair_point = project_point_on_plane(initiate_fair_point, item_group_masking, group_fairness)
+    print('Initiate point')
+    center_point = np.asarray([gamma.sum() / n_doc] * n_doc)
+    initiate_fair_point = project_point_on_plane(center_point, item_group_masking, group_fairness)
     assert majorized(initiate_fair_point, gamma), "Initiate point is not in the expohedron"
 
     end_point = gamma[invert_permutation(np.argsort(-relevance_score))]
-    end_fairness = np.sum((item_group_masking.T @ end_point - group_fairness) ** 2)
+    # _t = linear_programming_check(relevance_score, item_group_masking, gamma, item_group_masking.T @ end_point)
+    # print(relevance_score @ _t[:n_doc])
    
-    # print("Optimal_fairness_direction")
-    fixed_direction = project_vector_on_subspace(relevance_score,
-                                                fairness_level_projection_space)
-    # Post-correction optimal fairness level direction in case starting point is in opposite direction with relevance direction
-    optimal_fairness_direction = project_vector_on_subspace(fixed_direction, (end_point-initiate_fair_point).reshape(n_doc, 1))
+    print("Optimal_fairness_direction")
+    # TODO: This direction do not lead to optimal level in L1
+    optimal_fairness_direction = project_vector_on_subspace(end_point-initiate_fair_point,
+                                                            fairness_level_projection_space)
+    # optimal_fairness_direction = end_point - initiate_fair_point
+    # optimal_fairness_direction = project_vector_on_subspace(relevance_score, fairness_level_projection_space)
 
+    optimal_fairness_direction /= np.linalg.norm(optimal_fairness_direction)
     direction = relevance_score
 
-    # print("Start search for pareto front")
+
+    print("Start search for pareto front")
     pareto_set = []
     objectives = []
-    pareto_point, utils = optimal_utility_point_in_fair_level(initiate_fair_point, item_group_masking,
-                                                       direction, gamma)
-    pareto_set.append(pareto_point)
-    objectives.append([utils, 0])
-    pareto_set.append(end_point)
-    objectives.append([relevance_score @ end_point, end_fairness])
 
-    step = 0.2
-    nb_iteration = 0
+    step = 0.1
+    nb_iteration = 1
 
+    # return []
     while True:
+        starting_point = initiate_fair_point + (nb_iteration * step) * optimal_fairness_direction
         nb_iteration += 1
-        initiate_fair_point = initiate_fair_point + step * optimal_fairness_direction
-        if not majorized(initiate_fair_point, gamma):
+        if not majorized(starting_point, gamma):
+            print(nb_iteration)
             break
-        pareto_point, user_utilities = optimal_utility_point_in_fair_level(initiate_fair_point, item_group_masking,
-                                                           direction, gamma)
+
+        pareto_point = convex_constraints_prob(relevance_score, item_group_masking, gamma, b)
         assert majorized(pareto_point, gamma), "Projection went wrong, new point is out of the hedron."
 
-        unfairness = np.sum((item_group_masking.T @ pareto_point- group_fairness) ** 2)
+        unfairness = np.sum((item_group_masking.T @ pareto_point - group_fairness) ** 2)
+        user_utilities = relevance_score @ pareto_point
+
         pareto_set.append(pareto_point)
         objectives.append([user_utilities, unfairness])
-
-        if unfairness > end_fairness:
-            break
+        # break
+    print(objectives)
 
     return objectives
+
+
+def convex_constraints_prob(relevance_score, item_group_masking, gamma, group_fairness):
+    n_doc, n_group = item_group_masking.shape
+    gamma_sum = np.cumsum(gamma)
+    vars = cp.Variable(n_doc)
+    constrs = [cp.sum_largest(vars, i) <= gamma_sum[i-1] for i in range(1, n_doc)]
+    constrs.append(item_group_masking.T @ vars == group_fairness)
+    obj_func = cp.Maximize(cp.sum(relevance_score.T @ vars))
+    prob = cp.Problem(obj_func, constrs)
+    prob.solve(verbose=False)  # Returns the optimal value.
+    # print("status:", prob.status)
+    if prob.status == cp.OPTIMAL:
+        return vars.value
+    return None
 
 
 def load_data():
@@ -156,7 +121,7 @@ def load_data():
     # n_doc = item_group_masking.shape[0]
 
     n_doc = 100
-    n_group = 6
+    n_group = 40
 
     np.random.seed(n_doc)
     relevance_score = np.random.rand(n_doc)
@@ -169,6 +134,7 @@ def load_data():
     # np.savetxt("data_error/item_group.csv", item_group_masking, delimiter=",")
 
     gamma = 1 / np.log(np.arange(0, n_doc) + 2)
+    # gamma = np.asarray([4, 3, 2, 1])
     group_size = item_group_masking.sum(axis=0)
     group_fairness = group_size / np.sum(group_size) * np.sum(gamma)
 

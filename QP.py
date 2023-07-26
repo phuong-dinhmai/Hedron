@@ -1,3 +1,5 @@
+import time
+
 import cvxpy as cp
 import numpy as np
 import argparse
@@ -66,28 +68,30 @@ def experiment(relevance_score, item_list):
     for point in pareto_set:
         objecties = evaluate_probabilty(point, relevance_score, item_list)
         pareto_front.append(objecties)
-    # print(pareto_front)
+    print(pareto_front)
     return pareto_front
 
 
 if __name__ == "__main__":
     n_doc = 100
-    n_group = 5
+    n_group = 40
     np.random.seed(n_doc)
     relevance_score = np.random.rand(n_doc)
-    np.savetxt("data/relevance_score.csv", relevance_score, delimiter=",")
+    # np.savetxt("data/relevance_score.csv", relevance_score, delimiter=",")
 
     item_list = np.zeros((n_doc, n_group))
     for i in range(n_doc):
         j = random.randint(0, n_group-1)
         item_list[i][j] = 1
 
-    np.savetxt("data/item_group.csv", item_list, delimiter=",")
+    # np.savetxt("data/item_group.csv", item_list, delimiter=",")
 
     # relevance_score = np.loadtxt("data/relevance_score.csv", delimiter=",").astype(np.double)
     # item_list = np.loadtxt("data/item_group.csv", delimiter=",").astype(np.int32)
-
+    start = time.time()
     experiment(relevance_score, item_list)
+    end = time.time()
+    print(end - start)
 
     
 
