@@ -167,8 +167,8 @@ def intersect_vector_space(orthogonal_space_1: np.ndarray, orthogonal_space_2: n
     A_comple = null_space(A, HIGH_TOLERANCE)
     if A_comple.shape[1] == 0:
         return A_comple
-    # return orthogonal_space_1 @ A_comple[:orthogonal_space_1.shape[1], :]
-    return orth(orthogonal_space_2 @ A_comple[orthogonal_space_1.shape[1]:, :])
+    return orthogonal_space_1 @ A_comple[:orthogonal_space_1.shape[1], :]
+    # return orth(orthogonal_space_2 @ A_comple[orthogonal_space_1.shape[1]:, :])
 
 
 def find_face_intersection_bisection(gamma: np.ndarray, starting_point: np.ndarray,
@@ -217,6 +217,7 @@ def find_face_intersection_bisection(gamma: np.ndarray, starting_point: np.ndarr
             # We make sure the tested point is in the hyperplane containing the expohedron
             # The division phase is for point projection to expohedron
             k *= 2
+        # print(k)
 
         upper_bound = (starting_point + k*direction) / np.sum((starting_point + k*direction)) * np.sum(gamma)
         lower_bound = starting_point

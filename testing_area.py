@@ -66,7 +66,7 @@ def example(relevance_score: np.ndarray, item_group_masking: np.ndarray, group_f
     pareto_set = []
     objectives = []
 
-    step = 0.05
+    step = 0.01
     nb_iteration = 1
 
     # return []
@@ -82,23 +82,26 @@ def example(relevance_score: np.ndarray, item_group_masking: np.ndarray, group_f
         assert majorized(pareto_point, gamma), "Projection went wrong, new point is out of the hedron."
 
         face = identify_face(gamma, pareto_point)
-        print(face.splits)
-        print(face.zone)
+        # print(face.splits)
+        # print(face.zone)
 
         unfairness = np.sum((item_group_masking.T @ pareto_point - group_fairness) ** 2)
         user_utilities = relevance_score @ pareto_point
 
         pareto_set.append(pareto_point)
         objectives.append([user_utilities, unfairness])
-        # break
-    # for i in range(1, nb_iteration-1):
-    #     dir = pareto_set[i] - pareto_set[i-1]
-    #     face = identify_face(gamma, pareto_set[i-1])
-    #     face_orth = find_face_subspace_without_parent(face)
-    #     check_dir = project_vector_on_subspace(relevance_score, fairness_level_projection_space)
-    #     check_dir = project_on_vector_space(check_dir, face_orth.T)
-    #     # check_dir = project_vector_on_subspace(check_dir, fairness_level_projection_space)
-    #     print(check_dir / dir)
+        if len(pareto_set) == 3:
+            break
+    for i in range(1, nb_iteration-1):
+        dir = pareto_set[i] - pareto_set[i-1]
+        dir[np.abs(dir) < 1e-9] = 0
+        print(dir)
+        # face = identify_face(gamma, pareto_set[i-1])
+        # face_orth = find_face_subspace_without_parent(face)
+        # check_dir = project_vector_on_subspace(relevance_score, fairness_level_projection_space)
+        # check_dir = project_on_vector_space(check_dir, face_orth.T)
+        # check_dir = project_vector_on_subspace(check_dir, fairness_level_projection_space)
+        # print(check_dir / dir)
 
     print(objectives)
 
@@ -139,6 +142,8 @@ def example2(relevance_score: np.ndarray, item_group_masking: np.ndarray, group_
     objectives.append([user_utilities, unfairness])
 
     end_point = gamma[np.argsort(-relevance_score)]
+    # print(np.where(np.abs(np.cumsum(np.sort(gamma)) - np.cumsum(np.sort(end_point))) < 1e-6)[0])
+    # print(np.where(np.abs(np.cumsum(np.sort(gamma)) - np.cumsum(np.sort(pareto_point))) < 1e-6)[0])
     # optimal_fairness_direction = project_vector_on_subspace(end_point-pareto_point, fairness_level_projection_space)
     optimal_fairness_direction = project_vector_on_subspace(end_point - pareto_point, item_group_masking)
     # optimal_fairness_direction = relevance_score
@@ -158,19 +163,17 @@ def example2(relevance_score: np.ndarray, item_group_masking: np.ndarray, group_
         next_point = None
         for exclude in range(-1, n_col-1):
             _face_orth = face_orth[:, np.arange(n_col) != exclude]
-            # space = null_space(_face_orth.T, HIGH_TOLERANCE)
-            # direction_space = intersect_vector_space(space, item_group_masking)
-            # optimal_fairness_direction = project_vector_on_subspace(end_point-pareto_point,
-            #                                                         direction_space)
+            optimal_fairness_direction = project_vector_on_subspace(relevance_score, item_group_masking)
+            # optimal_fairness_direction = project_vector_on_subspace(end_point - pareto_point, item_group_masking)
             check_dir = project_on_vector_space(optimal_fairness_direction, _face_orth.T)
 
             if np.all(np.abs(check_dir) < 1e-9):
                 continue
             check_dir[np.abs(check_dir) < 1e-9] = 0
-            if np.abs(check_dir[3] + 0.00777838) > 1e-7:
-                print(exclude)
-                print(optimal_fairness_direction)
-                print(check_dir)
+            print(check_dir)
+            # print(exclude)
+            # if exclude == 6:
+            #     break
 
             intersect_point = find_face_intersection_bisection(gamma, pareto_point, check_dir)
             # print("start point: ", pareto_point)
@@ -193,8 +196,8 @@ def example2(relevance_score: np.ndarray, item_group_masking: np.ndarray, group_
         user_utilities = relevance_score @ next_point
         objectives.append([user_utilities, unfairness])
         pareto_point = next_point
-        print(nb_iteration)
-        print(user_utilities)
+        # print(nb_iteration)
+        # print(user_utilities)
 
         # break
     # for i in range(0, len(pareto_set)):
