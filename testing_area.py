@@ -1,11 +1,14 @@
 import matplotlib.pyplot as plt
 import numpy as np
 import time
-from scipy.linalg import null_space
+from copy import deepcopy
+from scipy.linalg import null_space, orth
 import cvxpy as cp
 
-from helpers import project_vector_on_subspace, project_point_on_plane
-from helpers import majorized, invert_permutation, intersect_vector_space
+from helpers import project_vector_on_subspace, project_point_on_plane, project_on_vector_space
+from helpers import majorized, invert_permutation, intersect_vector_space, find_face_intersection_bisection
+
+from expohedron_face import find_face_subspace_without_parent, identify_face, Face, find_face_subspace_without_parent_2
 
 from expohedron import caratheodory_decomposition_pbm_gls
 
@@ -18,8 +21,8 @@ HIGH_TOLERANCE = 1e-12
 def draw(a, b):
     a = np.asarray(a)
     b = np.asarray(b)
-    # b = b[b[:, 1].argsort()]
-    # a = a[a[:, 1].argsort()]
+    b = b[b[:, 1].argsort()]
+    a = a[a[:, 1].argsort()]
 
     plt.plot(b[:, 1], b[:, 0], label="QP")
     plt.plot(a[:, 1], a[:, 0], label="Hedron")
@@ -30,15 +33,10 @@ def draw(a, b):
 
 
 def example(relevance_score: np.ndarray, item_group_masking: np.ndarray, group_fairness: np.ndarray, gamma: np.ndarray):
-    n_doc = item_group_masking.shape[0]
-    n_group = item_group_masking.shape[1]
+    n_doc, n_group = item_group_masking.shape
 
     expohedron_complement = np.asarray([[1.0] * n_doc])
     expohedron_basis = null_space(expohedron_complement, HIGH_TOLERANCE)
-    group_dict = [[] for j in range(n_group)]
-    for i in range(n_doc):
-        g = np.where(item_group_masking[i, :] == 1)[0][0]
-        group_dict[g].append(i)
 
     print("Fairness_level_direction_space")
     # Since the vector space is orthogonal with a subspace in the expohedron space
@@ -52,8 +50,6 @@ def example(relevance_score: np.ndarray, item_group_masking: np.ndarray, group_f
     assert majorized(initiate_fair_point, gamma), "Initiate point is not in the expohedron"
 
     end_point = gamma[invert_permutation(np.argsort(-relevance_score))]
-    # _t = linear_programming_check(relevance_score, item_group_masking, gamma, item_group_masking.T @ end_point)
-    # print(relevance_score @ _t[:n_doc])
    
     print("Optimal_fairness_direction")
     # TODO: This direction do not lead to optimal level in L1
@@ -70,7 +66,7 @@ def example(relevance_score: np.ndarray, item_group_masking: np.ndarray, group_f
     pareto_set = []
     objectives = []
 
-    step = 0.1
+    step = 0.05
     nb_iteration = 1
 
     # return []
@@ -81,8 +77,13 @@ def example(relevance_score: np.ndarray, item_group_masking: np.ndarray, group_f
             print(nb_iteration)
             break
 
+        b = item_group_masking.T @ starting_point
         pareto_point = convex_constraints_prob(relevance_score, item_group_masking, gamma, b)
         assert majorized(pareto_point, gamma), "Projection went wrong, new point is out of the hedron."
+
+        face = identify_face(gamma, pareto_point)
+        print(face.splits)
+        print(face.zone)
 
         unfairness = np.sum((item_group_masking.T @ pareto_point - group_fairness) ** 2)
         user_utilities = relevance_score @ pareto_point
@@ -90,6 +91,114 @@ def example(relevance_score: np.ndarray, item_group_masking: np.ndarray, group_f
         pareto_set.append(pareto_point)
         objectives.append([user_utilities, unfairness])
         # break
+    # for i in range(1, nb_iteration-1):
+    #     dir = pareto_set[i] - pareto_set[i-1]
+    #     face = identify_face(gamma, pareto_set[i-1])
+    #     face_orth = find_face_subspace_without_parent(face)
+    #     check_dir = project_vector_on_subspace(relevance_score, fairness_level_projection_space)
+    #     check_dir = project_on_vector_space(check_dir, face_orth.T)
+    #     # check_dir = project_vector_on_subspace(check_dir, fairness_level_projection_space)
+    #     print(check_dir / dir)
+
+    print(objectives)
+
+    return objectives
+
+
+def example2(relevance_score: np.ndarray, item_group_masking: np.ndarray, group_fairness: np.ndarray, gamma: np.ndarray):
+    n_doc, n_group = item_group_masking.shape
+
+    expohedron_complement = np.asarray([[1.0] * n_doc])
+    expohedron_basis = null_space(expohedron_complement, HIGH_TOLERANCE)
+
+    print("Fairness_level_direction_space")
+    # Since the vector space is orthogonal with a subspace in the expohedron space
+    # The intersection space will also be the projection space
+    fairness_level_projection_space = intersect_vector_space(expohedron_basis, item_group_masking)
+    # optimal_fairness_direction = project_vector_on_subspace(relevance_score,
+    #                                                         fairness_level_projection_space)
+
+    # Random point in fairness surface
+    print('Initiate point')
+    center_point = np.asarray([gamma.sum() / n_doc] * n_doc)
+    initiate_fair_point = project_point_on_plane(center_point, item_group_masking, group_fairness)
+    assert majorized(initiate_fair_point, gamma), "Initiate point is not in the expohedron"
+
+    print("Start search for pareto front")
+    pareto_set = []
+    objectives = []
+
+    nb_iteration = 0
+    starting_point = initiate_fair_point
+    b = item_group_masking.T @ starting_point
+    pareto_point = convex_constraints_prob(relevance_score, item_group_masking, gamma, b)
+    assert majorized(pareto_point, gamma), "Projection went wrong, new point is out of the hedron."
+
+    unfairness = np.sum((item_group_masking.T @ pareto_point - group_fairness) ** 2)
+    user_utilities = relevance_score @ pareto_point
+    objectives.append([user_utilities, unfairness])
+
+    end_point = gamma[np.argsort(-relevance_score)]
+    # optimal_fairness_direction = project_vector_on_subspace(end_point-pareto_point, fairness_level_projection_space)
+    optimal_fairness_direction = project_vector_on_subspace(end_point - pareto_point, item_group_masking)
+    # optimal_fairness_direction = relevance_score
+    # print(end_point - pareto_point)
+    # print(optimal_fairness_direction)
+
+    # return []
+    while True:
+        # face = identify_face(gamma, pareto_point)
+        # face_orth = find_face_subspace_without_parent(face)
+        face_orth = find_face_subspace_without_parent_2(pareto_point, gamma)
+        # print(optimal_fairness_direction)
+        # print(face_orth)
+        n_row, n_col = face_orth.shape
+        max_utils = relevance_score @ pareto_point
+        # print("Current optimal: ", max_utils)
+        next_point = None
+        for exclude in range(-1, n_col-1):
+            _face_orth = face_orth[:, np.arange(n_col) != exclude]
+            # space = null_space(_face_orth.T, HIGH_TOLERANCE)
+            # direction_space = intersect_vector_space(space, item_group_masking)
+            # optimal_fairness_direction = project_vector_on_subspace(end_point-pareto_point,
+            #                                                         direction_space)
+            check_dir = project_on_vector_space(optimal_fairness_direction, _face_orth.T)
+
+            if np.all(np.abs(check_dir) < 1e-9):
+                continue
+            check_dir[np.abs(check_dir) < 1e-9] = 0
+            if np.abs(check_dir[3] + 0.00777838) > 1e-7:
+                print(exclude)
+                print(optimal_fairness_direction)
+                print(check_dir)
+
+            intersect_point = find_face_intersection_bisection(gamma, pareto_point, check_dir)
+            # print("start point: ", pareto_point)
+            # print("direction: ", check_dir)
+            # print(pareto_point - intersect_point)
+
+            if not majorized(intersect_point, gamma):
+                continue
+            user_utilities = relevance_score @ intersect_point
+            # print(user_utilities)
+            if user_utilities - max_utils > 1e-6:
+                max_utils = user_utilities
+                next_point = intersect_point
+        if next_point is None:
+            print(nb_iteration)
+            break
+        nb_iteration += 1
+        pareto_set.append(next_point)
+        unfairness = np.sum((item_group_masking.T @ next_point - group_fairness) ** 2)
+        user_utilities = relevance_score @ next_point
+        objectives.append([user_utilities, unfairness])
+        pareto_point = next_point
+        print(nb_iteration)
+        print(user_utilities)
+
+        # break
+    # for i in range(0, len(pareto_set)):
+    #     print(pareto_set[i] - pareto_set[i-1])
     print(objectives)
 
     return objectives
@@ -115,13 +224,15 @@ def load_data():
     # n_group = 2
     # relevance_score = np.asarray([0.7, 0.8, 1, 0.4])
     # item_group_masking = np.asarray([[0, 1], [0, 1], [1, 0], [1, 0]])
+    # gamma = np.asarray([4, 3, 2, 1])
+    # group_fairness = np.asarray([6.5, 3.5])
 
     # relevance_score = np.loadtxt("data_error/relevance_score.csv", delimiter=",").astype(np.double)
     # item_group_masking = np.loadtxt("data_error/item_group.csv", delimiter=",").astype(np.double)
     # n_doc = item_group_masking.shape[0]
 
     n_doc = 100
-    n_group = 40
+    n_group = 25
 
     np.random.seed(n_doc)
     relevance_score = np.random.rand(n_doc)
@@ -134,7 +245,6 @@ def load_data():
     # np.savetxt("data_error/item_group.csv", item_group_masking, delimiter=",")
 
     gamma = 1 / np.log(np.arange(0, n_doc) + 2)
-    # gamma = np.asarray([4, 3, 2, 1])
     group_size = item_group_masking.sum(axis=0)
     group_fairness = group_size / np.sum(group_size) * np.sum(gamma)
 
@@ -146,13 +256,14 @@ if __name__ == "__main__":
     _relevance_score, item_group, _group_fairness, _gamma = load_data()
     print("Start hedron experiment:")
     hedron_start = time.time()
-    objs = example(_relevance_score, item_group, _group_fairness, _gamma)
-    hedron_end = time.time()
-    print("Start QP experiment:")
-    qp_start = time.time()
-    base_qp = QP.experiment(_relevance_score, item_group)
-    qp_end = time.time()
-    print("Done")
-    print((hedron_end - hedron_start) / len(objs))
-    print((qp_end - qp_start) / len(base_qp))
-    draw(objs, base_qp)
+    objs = example2(_relevance_score, item_group, _group_fairness, _gamma)
+    # objs = example(_relevance_score, item_group, _group_fairness, _gamma)
+    # hedron_end = time.time()
+    # print("Start QP experiment:")
+    # qp_start = time.time()
+    # base_qp = QP.experiment(_relevance_score, item_group)
+    # qp_end = time.time()
+    # print("Done")
+    # print((hedron_end - hedron_start) / len(objs))
+    # print((qp_end - qp_start) / len(base_qp))
+    # draw(objs, base_qp)

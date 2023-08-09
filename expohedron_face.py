@@ -82,7 +82,22 @@ def find_face_subspace_without_parent(face: Face) -> np.ndarray:
     return orth(A.T)
 
 
-def identify_face(gamma: np.ndarray, point_on_face: np.ndarray, tolerance = LOW_TOLERANCE) -> Face:
+def find_face_subspace_without_parent_2(point, gamma, tolerance=LOW_TOLERANCE) -> np.ndarray:
+    n = len(gamma)  # The dimensionality of the space
+    splits = np.where(np.abs(np.cumsum(np.sort(-point)) - np.cumsum(np.sort(-gamma))) < tolerance)[0]
+    # print(splits)
+    n_orth = len(splits)  # The dimensionality of the orthogonal space
+    A = np.zeros((n_orth, n))
+    pos = invert_permutation(-point)
+    for j in np.arange(0, n_orth):
+        i = splits[j]
+        A[j, pos[:i+1]] = 1
+    # print(point)
+    return A.T
+    # return orth(A.T)
+
+
+def identify_face(gamma: np.ndarray, point_on_face: np.ndarray, tolerance=LOW_TOLERANCE) -> Face:
     """
         Computes the smallest face of the `gamma`-PBM-expohedron of which `point` is situated
 

@@ -125,7 +125,9 @@ def project_on_vector_space(point_to_project: np.ndarray, normal_vectors: np.nda
     """
     n = normal_vectors.shape[1]
     assert n == len(point_to_project), "The normal vectors must have the same dimension as the `point_to_project`"
+    # print(point_to_project)
     P = orth(normal_vectors.T)
+    # print(P)
     # P = normal_vectors.T
     return point_to_project - P @ (P.T @ point_to_project)
 
@@ -235,17 +237,20 @@ def find_face_intersection_bisection(gamma: np.ndarray, starting_point: np.ndarr
 
 
 if __name__ == "__main__":
-    U = np.asarray([(1,1,0,-1), (0,1,3,1)])
-    V = np.asarray([(0,-1,-2,1), (1,2,2,-2)])
-    # intersection_vector_space = intersect_vector_space(U.T, V.T)
-    # print(intersection_vector_space)
-    start = time.time()
-    project_vector_on_subspace(U[0], V.T)
-    end = time.time()
-    print(end - start)
-    _V = null_space(V)
-    start = time.time()
-    project_on_vector_space(U[0], _V.T)
-    end = time.time()
-    print(end - start)
+    # U = np.asarray([(1,1,0,-1), (0,1,3,1)])
+    # V = np.asarray([(0,-1,-2,1), (1,2,2,-2)])
+    # # intersection_vector_space = intersect_vector_space(U.T, V.T)
+    # # print(intersection_vector_space)
+    # start = time.time()
+    # project_vector_on_subspace(U[0], V.T)
+    # end = time.time()
+    # print(end - start)
+    # _V = null_space(V)
+    # start = time.time()
+    # project_on_vector_space(U[0], _V.T)
+    # end = time.time()
+    # print(end - start)
+    matrix = np.asarray([[1, 1, 1, 1], [1, 1, 1, 0]])
+    point = np.asarray([0, -0.025, 0.025, 0])
+    print(project_on_vector_space(point, matrix))
 
