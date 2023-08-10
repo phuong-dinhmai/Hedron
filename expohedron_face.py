@@ -84,7 +84,7 @@ def find_face_subspace_without_parent(face: Face) -> np.ndarray:
 
 def find_face_subspace_without_parent_2(point, gamma, tolerance=LOW_TOLERANCE) -> np.ndarray:
     n = len(gamma)  # The dimensionality of the space
-    splits = np.where(np.abs(np.cumsum(np.sort(-point)) - np.cumsum(np.sort(-gamma))) < tolerance)[0]
+    splits = np.where(np.abs(np.cumsum(np.sort(-gamma)) - np.cumsum(np.sort(-point))) < tolerance)[0]
     # print(splits)
     n_orth = len(splits)  # The dimensionality of the orthogonal space
     A = np.zeros((n_orth, n))

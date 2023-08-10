@@ -172,7 +172,7 @@ def intersect_vector_space(orthogonal_space_1: np.ndarray, orthogonal_space_2: n
 
 
 def find_face_intersection_bisection(gamma: np.ndarray, starting_point: np.ndarray,
-                                     direction: np.ndarray, precision: float = 1e-12) -> np.ndarray:
+                                     direction: np.ndarray, precision: float = DEFAULT_TOLERANCE) -> np.ndarray:
     """
         Executes a bisection search in the PBM-expohedron using the majorization criterion.
 
@@ -232,6 +232,7 @@ def find_face_intersection_bisection(gamma: np.ndarray, starting_point: np.ndarr
             else:
                 upper_bound = center
             if np.all(np.abs(upper_bound - lower_bound) < precision):
+                # print(nb_iterations)
                 return lower_bound 
             else:
                 pass
