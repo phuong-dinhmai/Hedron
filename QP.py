@@ -69,12 +69,16 @@ def experiment(relevance_score, item_list):
         objecties = evaluate_probabilty(point, relevance_score, item_list)
         pareto_front.append(objecties)
     print(pareto_front)
+
+    pareto_set = np.reshape(pareto_set, [len(pareto_set), n_doc*n_doc])
+    np.savetxt("base_result.txt", pareto_set, delimiter=",")
+
     return pareto_front
 
 
 if __name__ == "__main__":
     n_doc = 100
-    n_group = 40
+    n_group = 25
     np.random.seed(n_doc)
     relevance_score = np.random.rand(n_doc)
     # np.savetxt("data/relevance_score.csv", relevance_score, delimiter=",")
