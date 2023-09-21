@@ -3,8 +3,6 @@
 
     This file regroups a number of function about the expohedron
 """
-
-from scipy.special import comb
 import warnings
 import pareto as pareto
 
@@ -15,119 +13,6 @@ LOW_TOLERANCE = 1e-6
 DEFAULT_TOLERANCE = 1e-9
 HIGH_TOLERANCE = 1e-15
 MAX_TOLERANCE = 2.220446049250313e-16  # 2.220446049250313e-16
-
-
-class PBMexpohedron:
-    relevance_vector: np.ndarray
-    pbm: np.ndarray
-    n: int
-    prp_vertex: np.ndarray
-    prp_utility: float
-    prp_unfairness: float
-
-    def __init__(self, pbm: np.ndarray, relevance_vector: np.ndarray):
-        assert np.all(0 <= relevance_vector) and np.all(relevance_vector <= 1), "The values of `relevance_vector` must all be between 0 and 1"
-        self.relevance_vector = relevance_vector
-        self.pbm = pbm
-        self.n = len(relevance_vector)
-        self.prp_vertex = pbm[invert_permutation(np.argsort(-relevance_vector))]
-        self.prp_utility = self.prp_vertex @ relevance_vector
-
-    def __repr__(self):
-        string1 = "PBM expohedron:\n\trelevance_vector of length " + str(self.n) + " :\n\t" + str(self.relevance_vector)
-        string2 = "\n\tPBM = " + str(self.pbm)
-        return string1 + string2
-
-    def __str__(self):
-        return self.__repr__()
-
-    def is_inside(self, point: np.ndarray) -> bool:
-        return majorized(point, self.pbm)
-
-    def get_vertex(self, ranking: np.ndarray) -> np.ndarray:
-        """
-            Given a ranking, a relevance vector and an abandon probability, computes the exposure vector (in the document space)
-
-            The ranking is such that when applied to the document indices
-        :param ranking: A matrix of size D x D
-        :type ranking: numpy.array
-        :return: A column vector of size D
-        :rtype: numpy.array
-        """
-        assert is_ranking(ranking)
-        return self.pbm[invert_permutation(ranking)]
-
-    def utility(self, exposure_vector: np.ndarray) -> float:
-        return exposure_vector @ self.relevance_vector
-
-    def nutility(self, exposure_vector: np.ndarray) -> float:
-        return self.utility(exposure_vector) / self.prp_utility
-
-    def unfairness(self, exposure_vector: np.ndarray, fairness: str = "meritocratic",
-                   p_norm: float = 2, meritocratic_endpoint: str = "intersection") -> float:
-        """
-
-        :param fairness:
-        :param p_norm:
-        :param meritocratic_endpoint:
-        :return:
-        """
-        if fairness == "demographic":
-            target = self.demographic_fairness_target()
-        elif fairness == "meritocratic":
-            target = self.meritocratic_target_exposure(type=meritocratic_endpoint)
-        else:
-            raise ValueError("Invalid value for `fairness`")
-        return compute_unfairness(exposure_vector, target, p_norm)
-
-    def nunfairness(self, exposure_vector: np.ndarray, fairness: str = "meritocratic",
-                    p_norm: float = 2, meritocratic_endpoint: str = "intersection") -> float:
-        """
-            Normalized unfairness
-        :param fairness:
-        :param p_norm:
-        :param meritocratic_endpoint:
-        :return:
-        """
-        return self.unfairness(exposure_vector, fairness, p_norm, meritocratic_endpoint) / \
-               self.unfairness(self.prp_vertex, fairness, p_norm, meritocratic_endpoint)
-
-    def demographic_fairness_target(self) -> np.ndarray:
-        """
-            Computes the feasible demographic target exposure vector
-
-        :param expohedron: The expohedron to consider
-        :type expohedron: DBNexpohedron
-        :return: The demographic target exposure
-        :rtype: numpy.ndarray
-        """
-        return np.ones(self.n) * (self.prp_vertex @ np.ones(self.n)) / (np.ones(self.n) @ np.ones(self.n))
-
-    def meritocratic_target_exposure(self, type: str="intersection") -> np.ndarray:
-        """
-                Computes the feasible meritocratic target exposure vector
-
-            :param type: How to find a feasible target if the "true" one is infeasible
-            :type type: str, optional
-            :return: The meritocratic target exposure
-            :rtype: numpy.ndarray
-        """
-        assert type == "intersection", "Only intersection method is currently supported"
-        true_fairness_endpoint = self.relevance_vector * (self.prp_vertex @ np.ones(self.n)) / (self.relevance_vector @ np.ones(self.n))
-        if self.is_inside(true_fairness_endpoint):
-            return true_fairness_endpoint
-        else:
-            demographic_fairness_point = self.demographic_fairness_target()
-            direction = true_fairness_endpoint - demographic_fairness_point
-            return find_face_intersection(self.pbm, demographic_fairness_point, direction)
-
-    def target_exposure(self, fairness: str, meritocratic_endpoint: str = "intersection"):
-        if fairness == "demographic":
-            return self.demographic_fairness_target()
-        elif fairness == "meritocratic":
-            return self.meritocratic_target_exposure(type=meritocratic_endpoint)
-        else:
-            raise ValueError("Invalid value for `fairness`")
 
 
 def majorized(a: np.array, b: np.array, tolerance: float = LOW_TOLERANCE) -> bool:
@@ -145,29 +30,6 @@ def majorized(a: np.array, b: np.array, tolerance: float = LOW_TOLERANCE) -> boo
     """
     return np.all(np.cumsum(-np.sort(-a)) <= np.cumsum(-np.sort(-b)) + tolerance) and np.abs(np.sum(a) - np.sum(b)) < tolerance
 
-
-def sample_point_in_expohedron(gamma: np.ndarray, size: int = 1) -> np.ndarray:
-    """
-    Sample a random point inside the expohedron.
-
-    This is achieved by accept-reject sampling in the simplex
-    :param gamma: The PBM exposures
-    :type gamma: numpy.ndarray
-    :param size: The number of points to sample
-    :type size: int, optional
-    :return: A matrix whose rows are the sampled points in the expohedron
-    :rtype: numpy.ndarray
-    """
-    n = len(gamma)
-    result = np.zeros((size, n)) * np.nan
-    k = 0
-    while k < size:
-        sample = np.random.uniform(low=0, high=1, size=n)
-        sample = sample / np.sum(sample) * np.sum(gamma)
-        if majorized(sample, gamma):
-            result[k, :] = sample
-            k += 1
-    return result
 
 
 class Face:
@@ -216,38 +78,6 @@ class Face:
         return np.all(invert_permutation(self.zone)[self.splits] == invert_permutation(face.zone)[face.splits])
 
 
-def error_correction(point: np.ndarray, direction: np.ndarray, face: Face, tol: float = HIGH_TOLERANCE) -> np.ndarray:
-    """
-        Correct numerical imprecisions in a point on a face
-
-        Given a point `point` on a face `face` of an expohedron, and a half-line `direction` on which `point` lies`, corrects numerical imprecisions in `point`.
-        NB: The imprecise point MUST still be majorized by `face.gamma`.
-    :param point: The point to correct
-    :type point: numpy.ndarray
-    :param direction: The direction in which the point must be corrected
-    :type direction: numpy.ndarray
-    :param face: The face on which the point actually lies
-    :type face: Face
-    :param tol: The allowed tolerance for the corrected point
-    :type tol: float, optional
-    :return: The corrected point
-    :rtype: numpy.ndarray
-    """
-    n = len(point)
-    assert n == len(direction), "`direction must have same length as `point`"
-    assert majorized(point, face.gamma), "`point` must be majorized by `face.gamma`"
-
-    zone = np.argsort(direction)
-    # `face.zone` is the base we are working in
-    Gk = np.cumsum(face.gamma[zone])
-    Sk = np.cumsum(point[zone])
-    Dk = np.cumsum(direction[zone])
-    Lambda = min(np.abs((Gk - Sk)[0:(n - 1)] / Dk[0:(n - 1)]))
-    return point + Lambda * direction
-    # todo check if this works whatever zone `face` is defined in
-    # Answer: It does not
-
-
 def project_on_face_subspace(point_to_project: np.ndarray, face: Face, affine: bool = False):
     """
         Projects  the point `point_to_project` onto the linear subspace corresponding to `face`. If `affine is True` then the affine subspace is used
@@ -262,23 +92,11 @@ def project_on_face_subspace(point_to_project: np.ndarray, face: Face, affine: b
     """
     n = len(point_to_project)
     assert n == len(face.gamma), "`point_to_project` must have same length as `face.gamma`."
-    face_orth = find_face_subspace(face)
+    face_orth = find_face_subspace_without_parent(face)
     if affine:
         return project_on_affine_subspace(point_to_project, face_orth.T, offset=face.gamma[face.zone])  # todo check this
     else:
         return project_on_subspace(point_to_project, face_orth.T)
-
-
-def find_face_subspace(face: Face) -> np.ndarray:
-    """
-        Given a face of the expohedron, finds all the normal vectors to the smallest linear subspace containing that face.
-
-    :param face: The face whose subspace is to be found
-    :type face: Face
-    :return: A matrix whose rows are an orthonormal basis to the complement of the linear subspace. A such that S = {x | Ax=0}.
-    :rtype: numpy.ndarray
-    """
-    return find_face_subspace_without_parent(face)
 
 
 def find_face_subspace_without_parent(face: Face) -> np.ndarray:
@@ -303,6 +121,18 @@ def find_face_subspace_without_parent(face: Face) -> np.ndarray:
         nu[i+1:n] = -psi
         A[j, :] = nu[invert_permutation(face.zone)]
     return orth(A.T)
+
+
+def find_face_subspace_without_parent_2(point, gamma, tolerance=LOW_TOLERANCE) -> np.ndarray:
+    n = len(gamma)  # The dimensionality of the space
+    splits = np.where(np.abs(np.cumsum(np.sort(-gamma)) - np.cumsum(np.sort(-point))) < tolerance)[0]
+    n_orth = len(splits)  # The dimensionality of the orthogonal space
+    A = np.zeros((n_orth, n))
+    pos = invert_permutation(-point)
+    for j in np.arange(0, n_orth):
+        i = splits[j]
+        A[j, pos[:i+1]] = 1
+    return A.T
 
 
 def find_face_intersection(gamma: np.ndarray, starting_point: np.ndarray, direction: np.ndarray, precision: float = 1e-12) -> np.ndarray:
@@ -469,7 +299,7 @@ def post_correction(face: Face, point: np.ndarray, tolerance: float = DEFAULT_TO
     :rtype: numpy.ndarray
     """
     vertex_of_face = face.gamma[invert_permutation(face.zone)]
-    face_subspace = find_face_subspace(face)
+    face_subspace = find_face_subspace_without_parent(face)
     projected_point = project_on_subspace(point - vertex_of_face, face_subspace.T) + vertex_of_face
     assert face.contains(projected_point), "There has been an error in the projection on a face's subspace"
     return projected_point
@@ -510,7 +340,7 @@ def caratheodory_decomposition_pbm_gls(gamma: np.ndarray, point: np.ndarray, tol
             return convex_coefficients, vertices
         v = vertices[:, i]
         approx_direction = x - v
-        direction = project_on_subspace(approx_direction, find_face_subspace(identify_face(gamma, x)).T)
+        direction = project_on_subspace(approx_direction, find_face_subspace_without_parent(identify_face(gamma, x)).T)
         # direction = approx_direction
         intersection = find_face_intersection(gamma, v, direction)
         intersection = post_correction(identify_face(gamma, intersection), intersection)

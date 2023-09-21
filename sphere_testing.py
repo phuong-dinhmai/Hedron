@@ -10,7 +10,7 @@ from geomstats.geometry.hypersphere import Hypersphere, HypersphereMetric
 from helpers import project_point_on_plane, project_on_vector_space
 from helpers import majorized, find_face_intersection_bisection, invert_permutation
 
-from expohedron_face import find_face_subspace_without_parent_2, identify_face
+from expohedron import find_face_subspace_without_parent_2, identify_face
 
 import QP
 
