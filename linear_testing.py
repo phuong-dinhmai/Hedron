@@ -1,7 +1,7 @@
 import matplotlib.pyplot as plt
 import numpy as np
 import time
-from scipy.linalg import null_space, orth, norm
+from scipy.linalg import null_space, norm
 import cvxpy as cp
 
 from helpers import project_vector_on_subspace, project_point_on_plane, project_on_vector_space

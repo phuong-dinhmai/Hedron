@@ -4,7 +4,6 @@
     This file regroups a number of function about the expohedron
 """
 import warnings
-import pareto as pareto
 
 from utils import *
 
