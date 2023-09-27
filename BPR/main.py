@@ -2,124 +2,115 @@ import os
 import time
 import argparse
 import numpy as np
+from copy import deepcopy
 
 import torch
 import torch.nn as nn
 import torch.optim as optim
 import torch.utils.data as data
 import torch.backends.cudnn as cudnn
-from tensorboardX import SummaryWriter
+# from tensorboardX import SummaryWriter
 
-import model
-import config
+from model import BPR
+from data_utils import TripletUniformPair, load_all
 import evaluate
-import data_utils
-
-def parser():
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--lr", 
-        type=float, 
-        default=0.01, 
-        help="learning rate")
-    parser.add_argument("--lamda", 
-        type=float, 
-        default=0.001, 
-        help="model regularization rate")
-    parser.add_argument("--batch_size", 
-        type=int, 
-        default=256, 
-        help="batch size for training")
-    parser.add_argument("--epochs", 
-        type=int,
-        default=30,  
-        help="training epoches")
-    parser.add_argument("--top_k", 
-        type=int, 
-        default=10, 
-        help="compute metrics@top_k")
-    parser.add_argument("--factor_num", 
-        type=int,
-        default=32, 
-        help="predictive factors numbers in the model")
-    parser.add_argument("--num_ng", 
-        type=int,
-        default=4, 
-        help="sample negative items for training")
-    parser.add_argument("--test_num_ng", 
-        type=int,
-        default=99, 
-        help="sample part of negative items for testing")
-    parser.add_argument("--out", 
-        default=True,
-        help="save model or not")
-    parser.add_argument("--gpu", 
-        type=str,
-        default="0",  
-        help="gpu card ID")
-    return parser.parse_args()
 
 
 if __name__ == "__main__":
-    args = parser()
-    os.environ["CUDA_VISIBLE_DEVICES"] = args.gpu
+    parser = argparse.ArgumentParser()
+    # Seed
+    parser.add_argument('--seed',
+                        type=int,
+                        default=0,
+                        help="Seed (For reproducability)")
+    # Model
+    parser.add_argument('--dim',
+                        type=int,
+                        default=512,
+                        help="Dimension for embedding")
+    # Optimizer
+    parser.add_argument('--lr',
+                        type=float,
+                        default=1e-3,
+                        help="Learning rate")
+    parser.add_argument('--weight_decay',
+                        type=float,
+                        default=0.025,
+                        help="Weight decay factor")
+    # Training
+    parser.add_argument('--n_epochs',
+                        type=int,
+                        default=10,
+                        help="Number of epoch during training")
+    parser.add_argument('--batch_size',
+                        type=int,
+                        default=128,
+                        help="Batch size in one iteration")
+    parser.add_argument('--print_every',
+                        type=int,
+                        default=20,
+                        help="Period for printing smoothing loss during training")
+    parser.add_argument('--eval_every',
+                        type=int,
+                        default=1000,
+                        help="Period for evaluating precision and recall during training")
+    parser.add_argument('--save_every',
+                        type=int,
+                        default=10000,
+                        help="Period for saving model during training")
+    parser.add_argument('--model',
+                        type=str,
+                        default=os.path.join('/home/phuong/Documents/expohedron/BPR/output', 'bpr.pt'),
+                        help="File path for model")
+    args = parser.parse_args()
+    print(args)
     cudnn.benchmark = True
 
 
     ############################## PREPARE DATASET ##########################
-    train_data, test_data, user_num ,item_num, train_mat = data_utils.load_all()
-
-    # construct the train and test datasets
-    train_dataset = data_utils.BPRData(
-            train_data, item_num, train_mat, args.num_ng, True)
-    test_dataset = data_utils.BPRData(
-            test_data, item_num, train_mat, 0, False)
-    train_loader = data.DataLoader(train_dataset,
-            batch_size=args.batch_size, shuffle=True, num_workers=4)
-    test_loader = data.DataLoader(test_dataset,
-            batch_size=args.test_num_ng+1, shuffle=False, num_workers=0)
+    data_inf = load_all()
+    user_size, item_size = data_inf['user_size'], data_inf['item_size']
+    train_user_list, test_user_list = data_inf['train_user_list'], data_inf["test_user_list"]
+    train_pair = data_inf['train_pair']
 
     ########################### CREATE MODEL #################################
-    model = model.BPR(user_num, item_num, args.factor_num)
-    model.cuda()
-
-    optimizer = optim.SGD(
-                model.parameters(), lr=args.lr, weight_decay=args.lamda)
+    dataset = TripletUniformPair(item_size, train_user_list, train_pair, True, args.n_epochs)
+    loader = data.DataLoader(dataset, batch_size=args.batch_size, num_workers=16)
+    model = BPR(user_size, item_size, args.dim, args.weight_decay)
+    optimizer = optim.Adam(model.parameters(), lr=args.lr)
     # writer = SummaryWriter() # for visualization
 
     ########################### TRAINING #####################################
-    count, best_hr = 0, 0
-    for epoch in range(args.epochs):
-        model.train() 
-        start_time = time.time()
-        train_loader.dataset.ng_sample()
+    smooth_loss = 0
+    idx = 0
+    for u, i, j in loader:
+        optimizer.zero_grad()
+        loss = model(u, i, j)
+        loss.backward()
+        optimizer.step()
+        # writer.add_scalar('train/loss', loss, idx)
+        smooth_loss = smooth_loss*0.99 + loss*0.01
+        if idx % args.print_every == (args.print_every - 1):
+            print('loss: %.4f' % smooth_loss)
+        if idx % args.eval_every == (args.eval_every - 1):
+            plist, rlist = evaluate.precision_and_recall_k(model.W,
+                                                    model.H,
+                                                    train_user_list,
+                                                    test_user_list,
+                                                    klist=[1, 5, 10])
+            print('P@1: %.4f, P@5: %.4f P@10: %.4f, R@1: %.4f, R@5: %.4f, R@10: %.4f' % (plist[0], plist[1], plist[2], rlist[0], rlist[1], rlist[2]))
+            # writer.add_scalars('eval', {'P@1': plist[0],
+            #                                         'P@5': plist[1],
+            #                                         'P@10': plist[2]}, idx)
+            # writer.add_scalars('eval', {'R@1': rlist[0],
+            #                                     'R@5': rlist[1],
+            #                                     'R@10': rlist[2]}, idx)
+        if idx % args.save_every == (args.save_every - 1):
+            dirname = os.path.dirname(os.path.abspath(args.model))
+            os.makedirs(dirname, exist_ok=True)
+            torch.save(model.state_dict(), args.model)
+        idx += 1
 
-        for user, item_i, item_j in train_loader:
-            user = user.cuda()
-            item_i = item_i.cuda()
-            item_j = item_j.cuda()
-
-            model.zero_grad()
-            prediction_i, prediction_j = model(user, item_i, item_j)
-            loss = - (prediction_i - prediction_j).sigmoid().log().sum()
-            loss.backward()
-            optimizer.step()
-            # writer.add_scalar('data/loss', loss.item(), count)
-            count += 1
-
-        model.eval()
-        HR, NDCG = evaluate.metrics(model, test_loader, args.top_k)
-
-        elapsed_time = time.time() - start_time
-        print("The time elapse of epoch {:03d}".format(epoch) + " is: " + 
-                time.strftime("%H: %M: %S", time.gmtime(elapsed_time)))
-        print("HR: {:.3f}\tNDCG: {:.3f}".format(np.mean(HR), np.mean(NDCG)))
-
-        if HR > best_hr:
-            best_hr, best_ndcg, best_epoch = HR, NDCG, epoch
-            if args.out:
-                if not os.path.exists(config.model_path):
-                    os.mkdir(config.model_path)
-                torch.save(model, '{}BPR.pt'.format(config.model_path))
-
-    print("End. Best epoch {:03d}: HR = {:.3f}, \
-        NDCG = {:.3f}".format(best_epoch, best_hr, best_ndcg))
+    dirname = os.path.dirname(os.path.abspath(args.model))
+    os.makedirs(dirname, exist_ok=True)
+    torch.save(model.state_dict(), args.model)
