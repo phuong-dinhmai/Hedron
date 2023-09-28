@@ -1,5 +1,4 @@
 import numpy as np
-from utils import compute_unfairness
 
 
 def billiard_word(frequency):
@@ -57,4 +56,4 @@ def time_horizon_evaluate(ranking_probability, vertices, relevance_score, fair_e
         index = next(generator)
         exposure += vertices[:, index]
         utility_matrix[t] = exposure/t @ relevance_score / idcg
-        unfairness_matrix[t] = compute_unfairness(exposure/t, fair_exposure) / np.sum(pbm)
+        unfairness_matrix[t] = np.linalg.norm(exposure/t - fair_exposure) / np.sum(pbm)

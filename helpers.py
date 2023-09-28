@@ -1,6 +1,7 @@
 import numpy as np
-from scipy.linalg import orth, null_space
+from scipy.linalg import orth, null_space, norm
 import time
+import cvxpy as cp
 
 ULTRA_LOW_TOLERANCE = 5e-3
 LOW_TOLERANCE = 1e-6
@@ -80,8 +81,6 @@ def majorized(majorized_vector: np.array, majorizing_vector: np.array, tolerance
         :return: `True` if a < b, false otherwise
         :rtype: bool
     """
-    # print(np.cumsum(-np.sort(-majorized_vector)) - np.cumsum(-np.sort(-majorizing_vector)))
-    # print(np.abs(np.sum(majorized_vector) - np.sum(majorizing_vector)))
     return np.all(np.cumsum(-np.sort(-majorized_vector)) <= np.cumsum(-np.sort(-majorizing_vector)) + tolerance) \
            and np.abs(np.sum(majorized_vector) - np.sum(majorizing_vector)) < tolerance
 
@@ -171,71 +170,35 @@ def intersect_vector_space(orthogonal_space_1: np.ndarray, orthogonal_space_2: n
     # return orth(orthogonal_space_2 @ A_comple[orthogonal_space_1.shape[1]:, :])
 
 
-def find_face_intersection_bisection(gamma: np.ndarray, starting_point: np.ndarray,
-                                     direction: np.ndarray, precision: float = DEFAULT_TOLERANCE) -> np.ndarray:
-    """
-        Executes a bisection search in the PBM-expohedron using the majorization criterion.
+class Objective:
+    def __init__(self, relevance_score, group_fairness, group_masking, gamma):
+        self.relevance_score = relevance_score
+        self.target_group_unfairness = group_fairness
+        self.group_masking = group_masking
+        self.pbm = gamma
 
-        It finds the intersection of a half-line starting at `starting_point` in the direction `direction` with the border of the expohedron defined by `gamma`.
-    :param gamma: Any vertex of the PBM-expohedron
-    :type gamma: numpy.ndarray
-    :param starting_point: The starting point of the half-line
-    :type starting_point: numpy.ndarray
-    :param direction: The direction of the half-line
-    :type direction: numpy.ndarray
-    :param precision: The presicion required for termination of bisection
-    :type precision: float, optional
-    :return: The intersection of the expohedron's boundary with the half-line
-    :rtype numpy.ndarray
-    """
-    # 0. Input checks
-    n = len(gamma)
-    assert n == len(starting_point), "`starting_point` does not have the same length as `gamma`."
-    assert n == len(direction), "`direction` does not have the same length as `gamma`."
-    assert majorized(starting_point, gamma), "`starting_point` needs to be majorized by `gamma`. Check your inputs or decrease majorization tolerance."
+    def utils(self, point):
+        return self.relevance_score @ point
 
-    # If point and direction are in the same zone
-    if np.all(np.argsort(starting_point) == np.argsort(direction)):
-        zone = np.argsort(starting_point)
-        Gk = np.cumsum(np.sort(gamma))
-        Sk = np.cumsum(starting_point[zone])
-        Dk = np.cumsum(direction[zone])
-        # eliminate the coordinates where Dk is zero; no information about Lambda can be obtained from them. todo: refer to a proof in paper
+    def unfairness(self, point):
+        return np.sum((self.group_masking.T @ point - self.target_group_unfairness) ** 2)
 
-        # Lambda = min((Gk - Sk)[0:(n - 1)] / Dk[0:(n - 1)])
-        indices = np.where(np.abs(Dk) > 1e-12)
-        bounds = (Gk - Sk)[indices] / Dk[indices]
-        Lambda = min(bounds[np.where(bounds >= 0)], default=0)
+    def objectives(self, point):
+        return self.utils(point), self.unfairness(point)
 
-        return starting_point + Lambda * direction
-    else:
-        # Start binary search
-        # 1. Find upper and lower bound
-        k = 1
-
-        while majorized((starting_point + k*direction) / np.sum((starting_point + k*direction)) * np.sum(gamma), gamma):
-            # We make sure the tested point is in the hyperplane containing the expohedron
-            # The division phase is for point projection to expohedron
-            k *= 2
-        # print(k)
-
-        upper_bound = (starting_point + k*direction) / np.sum((starting_point + k*direction)) * np.sum(gamma)
-        lower_bound = starting_point
-
-        # 2. Do bisection
-        nb_iterations = 0
-        while True:
-            nb_iterations += 1
-            center = (upper_bound + lower_bound) / 2
-            if majorized(center, gamma, tolerance=precision):  # project center on face's affine subspace
-                lower_bound = center
-            else:
-                upper_bound = center
-            if np.all(np.abs(upper_bound - lower_bound) < precision):
-                # print(nb_iterations)
-                return lower_bound 
-            else:
-                pass
+    def convex_constraints_prob(self, group_unfairness):
+        n_doc, _ = self.group_masking.shape
+        gamma_sum = np.cumsum(self.pbm)
+        vars = cp.Variable(n_doc)
+        constrs = [cp.sum_largest(vars, i) <= gamma_sum[i-1] for i in range(1, n_doc)]
+        constrs.append(self.group_masking.T @ vars == group_unfairness)
+        obj_func = cp.Maximize(cp.sum(self.relevance_score.T @ vars))
+        prob = cp.Problem(obj_func, constrs)
+        prob.solve(verbose=False)  # Returns the optimal value.
+        # print("status:", prob.status)
+        if prob.status == cp.OPTIMAL:
+            return vars.value
+        return None
 
 
 if __name__ == "__main__":
