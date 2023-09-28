@@ -57,7 +57,7 @@ def experiment(relevance_score, item_list):
 
     pareto_set = []
     pareto_front = []
-    alpha_arr = np.arange(0, 21) / 20
+    alpha_arr = np.arange(0, 81) / 80
     for alpha in alpha_arr:
         solver = QP(relevance_score=relevance_score.reshape([n_doc, 1]), item_list=item_list, alpha=alpha)
         status, result = solver.optimize()
