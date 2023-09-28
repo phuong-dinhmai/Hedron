@@ -164,7 +164,7 @@ def example2(relevance_score: np.ndarray, item_group_masking: np.ndarray, group_
                 continue
             user_utilities = relevance_score @ intersect_point
             # print(user_utilities)
-            if user_utilities - max_utils > 1e-6:
+            if user_utilities - max_utils > 1e-9:
                 max_utils = user_utilities
                 next_point = intersect_point
         if next_point is None:
@@ -175,7 +175,7 @@ def example2(relevance_score: np.ndarray, item_group_masking: np.ndarray, group_
         user_utilities = relevance_score @ next_point
         objectives.append([user_utilities, unfairness])
         pareto_point = next_point
-        print(nb_iteration)
+        # print(nb_iteration)
         # print(user_utilities)
 
         # break
@@ -183,7 +183,36 @@ def example2(relevance_score: np.ndarray, item_group_masking: np.ndarray, group_
     return objectives, pareto_set
 
 
-def sphere_check(relevance_score: np.ndarray, item_group_masking: np.ndarray, group_fairness: np.ndarray, gamma: np.ndarray):
+def geodesic_binary_approximate(n_divided, s_start_point, s_end_point, center_point, radius, basis_transform, sphere, item_group_masking, relevance_score, gamma):
+    if n_divided == 0:
+        return []
+  
+    result = []
+    mid = geodesic_sample(s_start_point, s_end_point, sphere, 3)[1]
+    mid = basis_transform.re_transform([mid])[0]
+    corrected_point, s_mid_point = post_correction_point(mid, center_point, radius, item_group_masking, relevance_score, gamma)
+    s_mid_point = basis_transform.transform([s_mid_point])[0]
+    result += geodesic_binary_approximate(n_divided-1, s_start_point, s_mid_point, center_point, radius, basis_transform, sphere, item_group_masking, relevance_score, gamma)
+    result.append(corrected_point)
+    result += geodesic_binary_approximate(n_divided-1, s_mid_point, s_end_point, center_point, radius, basis_transform, sphere, item_group_masking, relevance_score, gamma)
+    return result
+
+
+def geodesic_sample(s_starting_point, s_end_point, sphere, n_point=3):
+    geodesic_func = sphere.metric.geodesic(initial_point=s_starting_point, end_point=s_end_point)
+    return geodesic_func(gs.linspace(0, 1, n_point))
+    
+
+def post_correction_point(sphere_point, center_point, radius, item_group_masking, relevance_score, gamma):
+    intersect = find_face_intersection_bisection(gamma, center_point, sphere_point-center_point)
+    b = item_group_masking.T @ intersect
+    pareto_point = convex_constraints_prob(relevance_score, item_group_masking, gamma, b)
+    revert =  line_intersect_sphere(center_point, radius, pareto_point)
+    # print(norm(revert-sphere_point))
+    return pareto_point, revert
+
+
+def sphere_check(relevance_score: np.ndarray, item_group_masking: np.ndarray, group_fairness: np.ndarray, gamma: np.ndarray, n_divided=3):
     n_doc, n_group = item_group_masking.shape
 
     expohedron_complement = np.asarray([[1.0] * n_doc])
@@ -199,8 +228,8 @@ def sphere_check(relevance_score: np.ndarray, item_group_masking: np.ndarray, gr
 
     end_point = gamma[invert_permutation(np.argsort(-relevance_score))]
     radius = norm(center_point - end_point)
-    starting_point = initiate_fair_point
-    b = item_group_masking.T @ starting_point
+
+    b = item_group_masking.T @ initiate_fair_point
     pareto_point = convex_constraints_prob(relevance_score, item_group_masking, gamma, b)
     assert majorized(pareto_point, gamma), "Projection went wrong, new point is out of the hedron."
 
@@ -215,17 +244,14 @@ def sphere_check(relevance_score: np.ndarray, item_group_masking: np.ndarray, gr
         [line_intersect_sphere(center_point, radius, pareto_point), end_point, center_point])
     sphere = Hypersphere(dim=n_doc-1)
 
-    geodesic_func = sphere.metric.geodesic(initial_point=t_starting_point, end_point=t_end_point)
-    points = geodesic_func(gs.linspace(0, 1, 25))
+    points = geodesic_binary_approximate(n_divided, t_starting_point, t_end_point, center_point, radius, basis_transform, sphere, item_group_masking, relevance_score, gamma)
+    points += (pareto_point, end_point)
 
     for point in points:
-        ori_point = basis_transform.re_transform([point])[0]
-        intersect_point = find_face_intersection_bisection(gamma, center_point, ori_point-center_point)
-
-        unfairness = np.sum((item_group_masking.T @ intersect_point - group_fairness) ** 2)
-        user_utilities = relevance_score @ intersect_point
+        unfairness = np.sum((item_group_masking.T @ point - group_fairness) ** 2)
+        user_utilities = relevance_score @ point
         objectives.append([user_utilities, unfairness])
-        pareto_set.append(intersect_point)
+        pareto_set.append(point)
 
     print(objectives)
     return objectives, pareto_set
@@ -259,7 +285,7 @@ def load_data():
     # n_doc = item_group_masking.shape[0]
 
     n_doc = 40
-    n_group = 8
+    n_group = 20
 
     np.random.seed(n_doc)
     relevance_score = np.random.rand(n_doc)
@@ -271,8 +297,8 @@ def load_data():
     prob = ss.norm.cdf(xU, scale=3) - ss.norm.cdf(xL, scale=3)
     prob = prob / prob.sum()
     for i in range(n_doc):
-        # j = np.random.randint(n_group, size=1)
-        j = np.random.choice(range(n_group), size=1, p=prob)
+        j = np.random.randint(n_group, size=1)
+        # j = np.random.choice(range(n_group), size=1, p=prob)
         item_group_masking[i][j[0]] = 1
     cnt_col = item_group_masking.sum(axis=0)
     item_group_masking = np.delete(item_group_masking, cnt_col == 0, 1)
@@ -392,33 +418,34 @@ def movielen100k_testing():
         group_size = group_masking.sum(axis=0)
         group_fairness = group_size / np.sum(group_size) * np.sum(gamma)
         optimal = example2(relevance_matrix[i], item_group_masking=group_masking, group_fairness=group_fairness, gamma=gamma)
-        sphere_pareto = sphere_check(relevance_matrix[i], item_group_masking=group_masking, group_fairness=group_fairness, gamma=gamma)
-        draw(optimal[0], sphere_pareto[0])
-        # draw(sphere_pareto[0], optimal[0])
+        sphere_pareto = sphere_check(relevance_matrix[i], item_group_masking=group_masking, group_fairness=group_fairness, gamma=gamma, n_divided=3)
+        # base_qp = QP.experiment(relevance_matrix[i], group_masking)
+        # draw(base_qp[-5:], sphere_pareto[0])
+        draw(sphere_pareto[0], optimal[0])
         break
 
 
 if __name__ == "__main__":
-    # print("Load data")
-    # _relevance_score, item_group, _group_fairness, _gamma = load_data()
-    # print("Start hedron experiment:")
-    # hedron_start = time.time()
-    # # objs, points = sphere_check(_relevance_score, item_group, _group_fairness, _gamma)
+    print("Load data")
+    _relevance_score, item_group, _group_fairness, _gamma = load_data()
+    print("Start hedron experiment:")
+    hedron_start = time.time()
+    objs, points = sphere_check(_relevance_score, item_group, _group_fairness, _gamma, n_divided=4)
     # objs, points = example2(_relevance_score, item_group, _group_fairness, _gamma)
     # test(_relevance_score, item_group, _group_fairness, _gamma, points)
 
     # print(len(points))
-    # hedron_end = time.time()
+    hedron_end = time.time()
 
-    # print("Start QP experiment:")
-    # qp_start = time.time()
-    # base_qp = QP.experiment(_relevance_score, item_group)
-    # qp_end = time.time()
-    # print("Done")
-    # print((hedron_end - hedron_start) / len(objs))
-    # print(hedron_end - hedron_start)
-    # print((qp_end - qp_start) / len(base_qp))
-    # print(qp_end - qp_start)
-    # draw(objs, base_qp)
+    print("Start QP experiment:")
+    qp_start = time.time()
+    base_qp = QP.experiment(_relevance_score, item_group)
+    qp_end = time.time()
+    print("Done")
+    print((hedron_end - hedron_start) / len(objs))
+    print(hedron_end - hedron_start)
+    print((qp_end - qp_start) / len(base_qp))
+    print(qp_end - qp_start)
+    draw(base_qp[5:], objs)
 
-    movielen100k_testing()
+    # movielen100k_testing()
