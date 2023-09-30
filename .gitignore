@@ -5,6 +5,7 @@ __pycache__/
 
 # data file
 data/
+base_result.txt
 
 # idea
 .idea/
