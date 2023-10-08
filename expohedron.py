@@ -180,7 +180,6 @@ class Expohedron:
 
         return starting_point + Lambda * direction
 
-
     def find_face_intersection_bisection(self, starting_point: np.ndarray, direction: np.ndarray, precision: float = DEFAULT_TOLERANCE) -> np.ndarray:
         """
             Executes a bisection search in the PBM-expohedron using the majorization criterion.
@@ -224,7 +223,6 @@ class Expohedron:
                 return self.identify_face(lower_bound).post_correction(lower_bound)
             else:
                 pass
-
     
     def identify_face(self, point_on_face: np.ndarray, tolerance: float = LOW_TOLERANCE) -> Face:
         """
@@ -253,9 +251,22 @@ def find_face_subspace_without_parent_2(point, gamma, tolerance=LOW_TOLERANCE) -
     n = len(gamma)  # The dimensionality of the space
     splits = np.where(np.abs(np.cumsum(np.sort(-gamma)) - np.cumsum(np.sort(-point))) < tolerance)[0]
     n_orth = len(splits)  # The dimensionality of the orthogonal space
-    A = np.zeros((n_orth, n))
+    A = np.zeros((n, n_orth))
     pos = invert_permutation(-point)
     for j in np.arange(0, n_orth):
         i = splits[j]
-        A[j, pos[:i+1]] = 1
-    return A.T
+        A[pos[:i+1], j] = 1
+    return A
+
+
+def update_face_by_point(next_point, ori_face, gamma, tolerance=LOW_TOLERANCE) -> np.ndarray:
+    n = len(gamma)  # The dimensionality of the space
+    splits_ori = ori_face.sum(axis=0).astype(int) - 1
+    splits_next = np.where(np.abs(np.cumsum(np.sort(-gamma)) - np.cumsum(np.sort(-next_point))) < tolerance)[0]
+    splits = set(splits_next).difference(splits_ori)
+    n_orth = len(splits)
+    A = np.zeros((n, n_orth))
+    pos = invert_permutation(-next_point)
+    for j, i in enumerate(splits):
+        A[pos[:i+1], j] = 1
+    return np.concatenate([A, ori_face], axis=1)

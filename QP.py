@@ -16,8 +16,9 @@ class QP:
     item_list: np.array
     alpha: float
     gamma: np.array
+    fair_exposure: np.array
 
-    def __init__(self, relevance_score, item_list, alpha) -> None:
+    def __init__(self, relevance_score, item_list, target_fairness, alpha) -> None:
         self.relevance_score = relevance_score
         self.item_list = item_list
         self.alpha = alpha
@@ -28,7 +29,7 @@ class QP:
         group_size = item_list.sum(axis=0)
         self.fair_exposure = group_size / np.sum(group_size) * np.sum(self.gamma)
         self.gamma = self.gamma.reshape([n_doc, 1])
-        self.fair_exposure = self.fair_exposure.reshape([n_group, 1])
+        self.fair_exposure = target_fairness
         # print(self.fair_exposure)
 
         # Birkhoff polotype
@@ -52,21 +53,23 @@ class QP:
         return prob.status, self.ranking_probability.value
 
 
-def experiment(relevance_score, item_list):
-    n_doc = relevance_score.shape[0]
+def experiment(relevance_score, item_list, target_fairness):
+    n_doc, n_group = item_list.shape
+    target_fairness = target_fairness.reshape([n_group, 1])
 
     pareto_set = []
     pareto_front = []
     alpha_arr = np.arange(0, 81) / 80
     for alpha in alpha_arr:
-        solver = QP(relevance_score=relevance_score.reshape([n_doc, 1]), item_list=item_list, alpha=alpha)
+        solver = QP(relevance_score=relevance_score.reshape([n_doc, 1]),
+                    item_list=item_list, target_fairness=target_fairness, alpha=alpha)
         status, result = solver.optimize()
 
         if status == cp.OPTIMAL:
             pareto_set.append(result)
 
     for point in pareto_set:
-        objecties = evaluate_probabilty(point, relevance_score, item_list)
+        objecties = evaluate_probabilty(point, relevance_score, item_list, target_fairness)
         pareto_front.append(objecties)
     print(pareto_front)
 

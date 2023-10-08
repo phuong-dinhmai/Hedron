@@ -3,7 +3,9 @@ import numpy as np
 import pandas as pd
 
 import pickle
-from scipy.linalg import null_space, norm
+
+import torch
+from scipy.linalg import null_space, norm, orth
 
 import scipy.stats as ss
 import time
@@ -11,7 +13,7 @@ import time
 from helpers import project_point_on_plane, project_on_vector_space, invert_permutation
 from helpers import Objective
 from sphereCoordinator import BasisTransformer, SphereCoordinator
-from expohedron import find_face_subspace_without_parent_2, Expohedron
+from expohedron import find_face_subspace_without_parent_2, update_face_by_point, Expohedron
 
 from BPR.evaluate import get_relevance
 
@@ -19,7 +21,6 @@ import QP
 
 
 HIGH_TOLERANCE = 1e-12
-
 
 
 def draw(a, b):
@@ -41,58 +42,64 @@ def example2(relevance_score: np.ndarray, item_group_masking: np.ndarray, group_
     hedron = Expohedron(gamma)
     objs = Objective(relevance_score, group_fairness, item_group_masking, gamma)
 
-    # Random point in fairness surface
-    print('Initiate point')
-    center_point = np.asarray([gamma.sum() / n_doc] * n_doc)
-    initiate_fair_point = project_point_on_plane(center_point, item_group_masking, group_fairness)
-    assert hedron.contains(initiate_fair_point), "Initiate point is not in the expohedron"
-
     print("Start search for pareto front")
     pareto_set = []
     objectives = []
 
     nb_iteration = 0
-    starting_point = initiate_fair_point
-    b = item_group_masking.T @ starting_point
-    pareto_point = objs.convex_constraints_prob(b)
+    pareto_point = objs.convex_constraints_prob(group_fairness)
     assert hedron.contains(pareto_point), "Projection went wrong, new point is out of the hedron."
 
     objectives.append(objs.objectives(pareto_point))
+    pareto_set.append(pareto_point)
+
+    face_orth = find_face_subspace_without_parent_2(pareto_point, gamma)
+    next_face = face_orth
 
     optimal_fairness_direction = relevance_score
-
+    # optimal_fairness_direction = project_on_vector_space(relevance_score, item_group_masking.T)
     while True:
-        face_orth = find_face_subspace_without_parent_2(pareto_point, gamma)
         if not hedron.contains(pareto_point):
             break
         _, n_col = face_orth.shape
         max_utils = objs.utils(pareto_point)
+        pre_util = objs.utils(pareto_point)
         # print("Current optimal: ", max_utils)
         next_point = None
         for exclude in range(-1, n_col-1):
             _face_orth = face_orth[:, np.arange(n_col) != exclude]
             check_dir = project_on_vector_space(optimal_fairness_direction, _face_orth.T)
 
-            if np.all(np.abs(check_dir) < 1e-9):
+            if np.all(np.abs(check_dir) < 1e-13):
                 continue
-            check_dir[np.abs(check_dir) < 1e-9] = 0
+            check_dir[np.abs(check_dir) < 1e-13] = 0
 
             intersect_point = hedron.find_face_intersection_bisection(pareto_point, check_dir)
-
-            if not hedron.contains(intersect_point):
+            if norm(intersect_point - pareto_point) < 1e-6:
                 continue
+
             user_utilities = objs.utils(intersect_point)
-            if user_utilities - max_utils > 1e-9:
+            x1 = (user_utilities - pre_util) / (objs.unfairness(intersect_point) - objs.unfairness(pareto_point))
+            x2 = (max_utils - pre_util) / (objs.unfairness(next_point) - objs.unfairness(pareto_point)) \
+                if next_point is not None else 0
+            if x1 > x2:
                 max_utils = user_utilities
                 next_point = intersect_point
+                next_face = update_face_by_point(intersect_point, _face_orth, gamma)
+
+            # print(user_utilities)
+            # if user_utilities - max_utils > 1e-6:
+            #     max_utils = user_utilities
+            #     next_point = intersect_point
         if next_point is None:
             break
         nb_iteration += 1
+        if nb_iteration == 30:
+            break
         pareto_set.append(next_point)
-        unfairness = np.sum((item_group_masking.T @ next_point - group_fairness) ** 2)
-        user_utilities = relevance_score @ next_point
-        objectives.append([user_utilities, unfairness])
+        objectives.append(objs.objectives(next_point))
         pareto_point = next_point
+        face_orth = next_face
 
     print(objectives)
     return objectives, pareto_set
@@ -132,6 +139,38 @@ def sphere_check(relevance_score: np.ndarray, item_group_masking: np.ndarray, gr
     return objectives, pareto_set
 
 
+def test(relevance_score, item_group_masking, group_fairness, gamma, points):
+    n_doc, n_group = item_group_masking.shape
+
+    expohedron_complement = np.asarray([[1.0] * n_doc])
+    center_point = np.asarray([gamma.sum() / n_doc] * n_doc)
+    end_point = gamma[invert_permutation(np.argsort(-relevance_score))]
+    radius = norm(center_point - end_point)
+
+    hedron = Expohedron(gamma)
+    objs = Objective(relevance_score, group_fairness, item_group_masking, gamma)
+    pre_opt = None
+
+    for j in range(0, len(points)-1):
+        point = points[j]
+        print(objs.objectives(point))
+        group_unfairness = item_group_masking.T @ point
+        optimal = objs.convex_constraints_prob(group_unfairness)
+        f1 = find_face_subspace_without_parent_2(optimal, gamma)
+        print(f1.T @ optimal - f1.T @ point)
+        # f2 = find_face_subspace_without_parent_2(point, gamma)
+        # if pre_opt is not None:
+        #     print((optimal - pre_opt) / norm(optimal - pre_opt))
+        #     print((point - points[j-1]) / norm(point - points[j-1]))
+        #     print(group_unfairness)
+        #     print(np.sort(point))
+        #     print(np.sort(optimal))
+        #     print(point)
+        #     print(optimal)
+        # break
+        pre_opt = optimal
+
+
 def load_data():
     # n_doc = 4
     # n_group = 2
@@ -144,11 +183,11 @@ def load_data():
     # item_group_masking = np.loadtxt("data_error/item_group.csv", delimiter=",").astype(np.double)
     # n_doc = item_group_masking.shape[0]
 
-    n_doc = 50
+    n_doc = 30
     n_group = 2
 
     np.random.seed(n_doc)
-    relevance_score = np.arange(1, 51) / 50
+    relevance_score = np.arange(1, n_doc+1) / n_doc
     # print(relevance_score)
     # relevance_score = np.random.rand(n_doc)
     # np.savetxt("data_error/relevance_score.csv", relevance_score, delimiter=",")
@@ -171,6 +210,7 @@ def load_data():
     gamma = 1 / np.log(np.arange(0, n_doc) + 2)
     group_size = item_group_masking.sum(axis=0)
     group_fairness = group_size / np.sum(group_size) * np.sum(gamma)
+    # print(group_fairness)
 
     return relevance_score, item_group_masking, group_fairness, gamma
 
@@ -197,14 +237,14 @@ def movielen100k_testing():
     
     for i in range(relevance_matrix.shape[0]):
         idx = item_idx[i]
-        # print(relevance_matrix[i])
+        print(relevance_matrix[i])
         group_masking = data_anal[["popular", "unpopular"]].loc[idx].to_numpy()
         group_size = group_masking.sum(axis=0)
         group_fairness = group_size / np.sum(group_size) * np.sum(gamma)
         optimal = example2(relevance_matrix[i], item_group_masking=group_masking, group_fairness=group_fairness, gamma=gamma)
-        sphere_pareto = sphere_check(relevance_matrix[i], item_group_masking=group_masking, group_fairness=group_fairness, gamma=gamma, n_divided=3)
-        base_qp = QP.experiment(relevance_matrix[i], group_masking)
-        draw(base_qp[-5:], sphere_pareto[0])
+        sphere_pareto = sphere_check(20*relevance_matrix[i], item_group_masking=group_masking, group_fairness=group_fairness, gamma=gamma, n_divided=3)
+        base_qp = QP.experiment(20*relevance_matrix[i], group_masking)
+        draw(base_qp, sphere_pareto[0])
         # draw(base_qp[-5:], optimal[0])
         break
 
@@ -214,22 +254,23 @@ if __name__ == "__main__":
     _relevance_score, item_group, _group_fairness, _gamma = load_data()
     print("Start hedron experiment:")
     hedron_start = time.time()
-    objs, points = sphere_check(_relevance_score, item_group, _group_fairness, _gamma, n_divided=0, n_sample=25)
-    # objs, points = example2(_relevance_score, item_group, _group_fairness, _gamma)
+    # objs, points = sphere_check(_relevance_score, item_group, _group_fairness, _gamma, n_divided=3, n_sample=6)
+    objs, points = example2(_relevance_score, item_group, _group_fairness, _gamma)
     # test(_relevance_score, item_group, _group_fairness, _gamma, points)
-    
+    # raise Exception("stop")
+
     # print(len(points))
     hedron_end = time.time()
-    
+
     print("Start QP experiment:")
     qp_start = time.time()
-    base_qp = QP.experiment(_relevance_score, item_group)
+    base_qp = QP.experiment(_relevance_score, item_group, _group_fairness)
     qp_end = time.time()
     print("Done")
     print((hedron_end - hedron_start) / len(objs))
     print(hedron_end - hedron_start)
     print((qp_end - qp_start) / len(base_qp))
     print(qp_end - qp_start)
-    draw(base_qp[5:], objs)
+    draw(base_qp[4:], objs)
 
     # movielen100k_testing()

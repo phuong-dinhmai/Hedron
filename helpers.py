@@ -189,15 +189,15 @@ class Objective:
     def convex_constraints_prob(self, group_unfairness):
         n_doc, _ = self.group_masking.shape
         gamma_sum = np.cumsum(self.pbm)
-        vars = cp.Variable(n_doc)
-        constrs = [cp.sum_largest(vars, i) <= gamma_sum[i-1] for i in range(1, n_doc)]
-        constrs.append(self.group_masking.T @ vars == group_unfairness)
-        obj_func = cp.Maximize(cp.sum(self.relevance_score.T @ vars))
+        cp_vars = cp.Variable(n_doc)
+        constrs = [cp.sum_largest(cp_vars, i) <= gamma_sum[i - 1] for i in range(1, n_doc)]
+        constrs.append(self.group_masking.T @ cp_vars == group_unfairness)
+        obj_func = cp.Maximize(cp.sum(self.relevance_score.T @ cp_vars))
         prob = cp.Problem(obj_func, constrs)
         prob.solve(verbose=False)  # Returns the optimal value.
         # print("status:", prob.status)
         if prob.status == cp.OPTIMAL:
-            return vars.value
+            return cp_vars.value
         return None
 
 
@@ -216,6 +216,6 @@ if __name__ == "__main__":
     # end = time.time()
     # print(end - start)
     matrix = np.asarray([[1, 1, 1, 1], [1, 1, 1, 0]])
-    point = np.asarray([0, -0.025, 0.025, 0])
-    print(project_on_vector_space(point, matrix))
+    _point = np.asarray([0, -0.025, 0.025, 0])
+    print(project_on_vector_space(_point, matrix))
 
