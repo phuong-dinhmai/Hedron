@@ -1,43 +1,18 @@
-import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 
-import pickle
-
-import torch
 from scipy.linalg import null_space, norm, orth
-
-import scipy.stats as ss
-import time
 
 from helpers import project_point_on_plane, project_on_vector_space, invert_permutation, intersect_vector_space
 from helpers import Objective, project_vector_on_subspace
 from sphereCoordinator import BasisTransformer, SphereCoordinator
 from expohedron import find_face_subspace_without_parent_2, update_face_by_point, Expohedron
 
-from BPR.evaluate import get_relevance
-
-import QP
-
 
 HIGH_TOLERANCE = 1e-12
 
 
-def draw(a, b):
-    a = np.asarray(a)
-    b = np.asarray(b)
-    b = b[b[:, 1].argsort()]
-    a = a[a[:, 1].argsort()]
-
-    plt.plot(b[:, 1], b[:, 0], label="check")
-    plt.plot(a[:, 1], a[:, 0], label="optimal")
-    plt.ylabel("User utility")
-    plt.xlabel("Unfairness")
-    plt.legend(loc='lower right')
-    plt.show()
-
-
-def example2(relevance_score: np.ndarray, item_group_masking: np.ndarray, group_fairness: np.ndarray, gamma: np.ndarray):
+def projected_path(relevance_score: np.ndarray, item_group_masking: np.ndarray, group_fairness: np.ndarray, gamma: np.ndarray):
     n_doc, _ = item_group_masking.shape
     hedron = Expohedron(gamma)
     objs = Objective(relevance_score, group_fairness, item_group_masking, gamma)
@@ -122,7 +97,7 @@ def example2(relevance_score: np.ndarray, item_group_masking: np.ndarray, group_
     return objectives, pareto_set
 
 
-def sphere_check(relevance_score: np.ndarray, item_group_masking: np.ndarray, group_fairness: np.ndarray, gamma: np.ndarray, n_divided=3, n_sample=5):
+def sphere_path(relevance_score: np.ndarray, item_group_masking: np.ndarray, group_fairness: np.ndarray, gamma: np.ndarray, n_divided=3, n_sample=5):
     n_doc, _ = item_group_masking.shape
 
     expohedron_complement = np.asarray([[1.0] * n_doc])
@@ -154,140 +129,3 @@ def sphere_check(relevance_score: np.ndarray, item_group_masking: np.ndarray, gr
 
     print(objectives)
     return objectives, pareto_set
-
-
-def test(relevance_score, item_group_masking, group_fairness, gamma, points):
-    n_doc, n_group = item_group_masking.shape
-
-    expohedron_complement = np.asarray([[1.0] * n_doc])
-    center_point = np.asarray([gamma.sum() / n_doc] * n_doc)
-    end_point = gamma[invert_permutation(np.argsort(-relevance_score))]
-    radius = norm(center_point - end_point)
-
-    hedron = Expohedron(gamma)
-    objs = Objective(relevance_score, group_fairness, item_group_masking, gamma)
-    pre_opt = None
-
-    for j in range(0, len(points)-1):
-        point = points[j]
-        print(objs.objectives(point))
-        group_unfairness = item_group_masking.T @ point
-        optimal = objs.convex_constraints_prob(group_unfairness)
-        f1 = find_face_subspace_without_parent_2(optimal, gamma)
-        print(f1.T @ optimal - f1.T @ point)
-        # f2 = find_face_subspace_without_parent_2(point, gamma)
-        # if pre_opt is not None:
-        #     print((optimal - pre_opt) / norm(optimal - pre_opt))
-        #     print((point - points[j-1]) / norm(point - points[j-1]))
-        #     print(group_unfairness)
-        #     print(np.sort(point))
-        #     print(np.sort(optimal))
-        #     print(point)
-        #     print(optimal)
-        # break
-        pre_opt = optimal
-
-
-def load_data():
-    # n_doc = 4
-    # n_group = 2
-    # relevance_score = np.asarray([0.7, 0.8, 1, 0.4])
-    # item_group_masking = np.asarray([[0, 1], [0, 1], [1, 0], [1, 0]])
-    # gamma = np.asarray([4, 3, 2, 1])
-    # group_fairness = np.asarray([6.5, 3.5])
-
-    # relevance_score = np.loadtxt("data_error/relevance_score.csv", delimiter=",").astype(np.double)
-    # item_group_masking = np.loadtxt("data_error/item_group.csv", delimiter=",").astype(np.double)
-    # n_doc = item_group_masking.shape[0]
-
-    n_doc = 12
-    n_group = 2
-
-    np.random.seed(n_doc)
-    # relevance_score = np.arange(1, n_doc+1) / n_doc
-    # print(relevance_score)
-    relevance_score = np.random.rand(n_doc)
-    # np.savetxt("data_error/relevance_score.csv", relevance_score, delimiter=",")
-
-    item_group_masking = np.zeros((n_doc, n_group))
-    # item_group_masking[:10, 0] = 1
-    # item_group_masking[10:, 1] = 1
-    # x = np.arange(-n_group/2, n_group/2)
-    # xU, xL = x + 0.5, x - 0.5
-    # prob = ss.norm.cdf(xU, scale=3) - ss.norm.cdf(xL, scale=3)
-    # prob = prob / prob.sum()
-    for i in range(n_doc):
-        j = np.random.randint(n_group, size=1)
-        # j = np.random.choice(range(n_group), size=1, p=prob)
-        item_group_masking[i][j[0]] = 1
-    cnt_col = item_group_masking.sum(axis=0)
-    item_group_masking = np.delete(item_group_masking, cnt_col == 0, 1)
-    # np.savetxt("data_error/item_group.csv", item_group_masking, delimiter=",")
-
-    gamma = 1 / np.log(np.arange(0, n_doc) + 2)
-    group_size = item_group_masking.sum(axis=0)
-    group_fairness = group_size / np.sum(group_size) * np.sum(gamma)
-    # print(group_fairness)
-
-    return relevance_score, item_group_masking, group_fairness, gamma
-
-
-def movielen100k_testing():
-    from BPR.model import BPR
-
-    with open("BPR/output/data.pkl", 'rb') as f:
-        dataset = pickle.load(f)
-        user_size, item_size = dataset['user_size'], dataset['item_size']
-        train_user_list, test_user_list = dataset['train_user_list'], dataset['test_user_list']
-        # train_pair = dataset['train_pair']
-
-    model = BPR(user_size, item_size, dim=512, weight_decay=0.025)
-    model.load_state_dict(torch.load("BPR/output/bpr.pt"))
-    model.eval()
-
-    relevance_matrix, item_idx = get_relevance(50, model.W, model.H, train_user_list, batch=512)
-    item_idx = item_idx.numpy()
-    relevance_matrix = relevance_matrix.detach().numpy()
-    data_anal = pd.read_csv("BPR/output/data_analysis.csv", index_col=0)
-    
-    gamma = 1 / np.log(np.arange(0, 50) + 2)
-    
-    for i in range(relevance_matrix.shape[0]):
-        idx = item_idx[i]
-        print(relevance_matrix[i])
-        group_masking = data_anal[["popular", "unpopular"]].loc[idx].to_numpy()
-        group_size = group_masking.sum(axis=0)
-        group_fairness = group_size / np.sum(group_size) * np.sum(gamma)
-        optimal = example2(relevance_matrix[i], item_group_masking=group_masking, group_fairness=group_fairness, gamma=gamma)
-        sphere_pareto = sphere_check(20*relevance_matrix[i], item_group_masking=group_masking, group_fairness=group_fairness, gamma=gamma, n_divided=3)
-        base_qp = QP.experiment(20*relevance_matrix[i], group_masking)
-        draw(base_qp, sphere_pareto[0])
-        # draw(base_qp[-5:], optimal[0])
-        break
-
-
-if __name__ == "__main__":
-    print("Load data")
-    _relevance_score, item_group, _group_fairness, _gamma = load_data()
-    print("Start hedron experiment:")
-    hedron_start = time.time()
-    # objs, points = sphere_check(_relevance_score, item_group, _group_fairness, _gamma, n_divided=3, n_sample=6)
-    objs, points = example2(_relevance_score, item_group, _group_fairness, _gamma)
-    # test(_relevance_score, item_group, _group_fairness, _gamma, points)
-    # raise Exception("stop")
-
-    # print(len(points))
-    hedron_end = time.time()
-
-    print("Start QP experiment:")
-    qp_start = time.time()
-    base_qp = QP.experiment(_relevance_score, item_group, _group_fairness)
-    qp_end = time.time()
-    print("Done")
-    print((hedron_end - hedron_start) / len(objs))
-    print(hedron_end - hedron_start)
-    print((qp_end - qp_start) / len(base_qp))
-    print(qp_end - qp_start)
-    draw(base_qp[4:], objs)
-
-    # movielen100k_testing()

@@ -5,10 +5,19 @@ import numpy as np
 import argparse
 import random
 
-from evaluation import evaluate_probabilty
-
 parser = argparse.ArgumentParser()
 parser.add_argument("-alpha", type=float, help="Trade off hyperparameter between utilities and fairness", default=0.5)
+
+
+def evaluate_probabilty(ranking_probability: np.array, relevance_score: np.array, item_list: np.array, fair_exposure):
+    n_doc, n_group = item_list.shape
+    gamma = 1 / np.log(np.arange(0, n_doc) + 2) #the DCG exposure
+
+    gamma = gamma.reshape([n_doc, 1])
+    
+    user_utilities = np.sum(relevance_score.T @ ranking_probability @ gamma)
+    unfairness = np.sum((item_list.T @ (ranking_probability @ gamma) - fair_exposure) ** 2)
+    return user_utilities, unfairness
 
 
 class QP:
@@ -53,30 +62,32 @@ class QP:
         return prob.status, self.ranking_probability.value
 
 
-def experiment(relevance_score, item_list, target_fairness):
+def experiment(relevance_score, item_list, target_fairness, alpha_arr):
     n_doc, n_group = item_list.shape
     target_fairness = target_fairness.reshape([n_group, 1])
 
     pareto_set = []
     pareto_front = []
-    alpha_arr = np.arange(0, 81) / 80
     for alpha in alpha_arr:
-        solver = QP(relevance_score=relevance_score.reshape([n_doc, 1]),
-                    item_list=item_list, target_fairness=target_fairness, alpha=alpha)
-        status, result = solver.optimize()
+        try:
+            solver = QP(relevance_score=relevance_score.reshape([n_doc, 1]),
+                        item_list=item_list, target_fairness=target_fairness, alpha=alpha)
+            status, result = solver.optimize()
 
-        if status == cp.OPTIMAL:
-            pareto_set.append(result)
+            if status == cp.OPTIMAL:
+                pareto_set.append(result)
+                objecties = evaluate_probabilty(result, relevance_score, item_list, target_fairness)
+                pareto_front.append(objecties)
+        except:
+            pareto_set.append(None)
+            pareto_front.append(None)
+        
+    # print(pareto_front)
 
-    for point in pareto_set:
-        objecties = evaluate_probabilty(point, relevance_score, item_list, target_fairness)
-        pareto_front.append(objecties)
-    print(pareto_front)
+    # pareto_set = np.reshape(pareto_set, [len(pareto_set), n_doc*n_doc])
+    # np.savetxt("base_result.txt", pareto_set, delimiter=",")
 
-    pareto_set = np.reshape(pareto_set, [len(pareto_set), n_doc*n_doc])
-    np.savetxt("base_result.txt", pareto_set, delimiter=",")
-
-    return pareto_front
+    return pareto_set, pareto_front
 
 
 if __name__ == "__main__":
