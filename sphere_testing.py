@@ -10,8 +10,8 @@ from scipy.linalg import null_space, norm, orth
 import scipy.stats as ss
 import time
 
-from helpers import project_point_on_plane, project_on_vector_space, invert_permutation
-from helpers import Objective
+from helpers import project_point_on_plane, project_on_vector_space, invert_permutation, intersect_vector_space
+from helpers import Objective, project_vector_on_subspace
 from sphereCoordinator import BasisTransformer, SphereCoordinator
 from expohedron import find_face_subspace_without_parent_2, update_face_by_point, Expohedron
 
@@ -41,6 +41,10 @@ def example2(relevance_score: np.ndarray, item_group_masking: np.ndarray, group_
     n_doc, _ = item_group_masking.shape
     hedron = Expohedron(gamma)
     objs = Objective(relevance_score, group_fairness, item_group_masking, gamma)
+
+    if n_doc < 12:
+        expohedron_complement = np.asarray([[1.0] * n_doc])
+        x = intersect_vector_space(null_space(expohedron_complement), item_group_masking).T
 
     print("Start search for pareto front")
     pareto_set = []
@@ -75,6 +79,19 @@ def example2(relevance_score: np.ndarray, item_group_masking: np.ndarray, group_
             check_dir[np.abs(check_dir) < 1e-13] = 0
 
             intersect_point = hedron.find_face_intersection_bisection(pareto_point, check_dir)
+
+            # Post-correction for small N
+            if n_doc < 12:
+                y = null_space(_face_orth.T)
+                check = intersect_vector_space(null_space(relevance_score.reshape((1, n_doc))), y)
+                if check.shape[1] != 0:
+                    k = np.asarray([project_vector_on_subspace(vec, check)
+                                    for vec in x])
+                    k = orth(k.T)
+                    for vec in k.T:
+                        sign = objs.unfairness(intersect_point + 0.0001*vec) - objs.unfairness(intersect_point)
+                        intersect_point = hedron.find_face_intersection_bisection(intersect_point, -sign * vec)
+
             if norm(intersect_point - pareto_point) < 1e-6:
                 continue
 
@@ -94,8 +111,8 @@ def example2(relevance_score: np.ndarray, item_group_masking: np.ndarray, group_
         if next_point is None:
             break
         nb_iteration += 1
-        if nb_iteration == 30:
-            break
+        # if nb_iteration == 30:
+        #     break
         pareto_set.append(next_point)
         objectives.append(objs.objectives(next_point))
         pareto_point = next_point
@@ -183,26 +200,26 @@ def load_data():
     # item_group_masking = np.loadtxt("data_error/item_group.csv", delimiter=",").astype(np.double)
     # n_doc = item_group_masking.shape[0]
 
-    n_doc = 30
+    n_doc = 12
     n_group = 2
 
     np.random.seed(n_doc)
-    relevance_score = np.arange(1, n_doc+1) / n_doc
+    # relevance_score = np.arange(1, n_doc+1) / n_doc
     # print(relevance_score)
-    # relevance_score = np.random.rand(n_doc)
+    relevance_score = np.random.rand(n_doc)
     # np.savetxt("data_error/relevance_score.csv", relevance_score, delimiter=",")
 
     item_group_masking = np.zeros((n_doc, n_group))
-    item_group_masking[:10, 0] = 1
-    item_group_masking[10:, 1] = 1
+    # item_group_masking[:10, 0] = 1
+    # item_group_masking[10:, 1] = 1
     # x = np.arange(-n_group/2, n_group/2)
     # xU, xL = x + 0.5, x - 0.5
     # prob = ss.norm.cdf(xU, scale=3) - ss.norm.cdf(xL, scale=3)
     # prob = prob / prob.sum()
-    # for i in range(n_doc):
-    #     j = np.random.randint(n_group, size=1)
-    #     # j = np.random.choice(range(n_group), size=1, p=prob)
-    #     item_group_masking[i][j[0]] = 1
+    for i in range(n_doc):
+        j = np.random.randint(n_group, size=1)
+        # j = np.random.choice(range(n_group), size=1, p=prob)
+        item_group_masking[i][j[0]] = 1
     cnt_col = item_group_masking.sum(axis=0)
     item_group_masking = np.delete(item_group_masking, cnt_col == 0, 1)
     # np.savetxt("data_error/item_group.csv", item_group_masking, delimiter=",")
