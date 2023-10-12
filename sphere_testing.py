@@ -21,7 +21,7 @@ def projected_path(relevance_score: np.ndarray, item_group_masking: np.ndarray, 
         expohedron_complement = np.asarray([[1.0] * n_doc])
         x = intersect_vector_space(null_space(expohedron_complement), item_group_masking).T
 
-    print("Start search for pareto front")
+    # print("Start search for pareto front")
     pareto_set = []
     objectives = []
 
@@ -93,7 +93,7 @@ def projected_path(relevance_score: np.ndarray, item_group_masking: np.ndarray, 
         pareto_point = next_point
         face_orth = next_face
 
-    print(objectives)
+    # print(objectives)
     return objectives, pareto_set
 
 
@@ -104,12 +104,12 @@ def sphere_path(relevance_score: np.ndarray, item_group_masking: np.ndarray, gro
     hedron = Expohedron(gamma)
     objs = Objective(relevance_score, group_fairness, item_group_masking, gamma)
 
-    print('Initiate point')
+    # print('Initiate point')
     center_point = np.asarray([gamma.sum() / n_doc] * n_doc)
     initiate_fair_point = project_point_on_plane(center_point, item_group_masking, group_fairness)
     assert hedron.contains(initiate_fair_point), "Initiate point is not in the expohedron"
 
-    print("Start search for pareto front")
+    # print("Start search for pareto front")
 
     end_point = gamma[invert_permutation(np.argsort(-relevance_score))]
     radius = norm(center_point - end_point)
@@ -127,5 +127,5 @@ def sphere_path(relevance_score: np.ndarray, item_group_masking: np.ndarray, gro
     pareto_set = [pareto_point,] + pareto_set + [end_point,]
     objectives = [objs.objectives(point) for point in pareto_set]
 
-    print(objectives)
+    # print(objectives)
     return objectives, pareto_set

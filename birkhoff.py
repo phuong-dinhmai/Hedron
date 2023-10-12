@@ -25,7 +25,7 @@ from __future__ import division
 import itertools
 
 # Imports from third-party libraries.
-from networkx import from_numpy_array
+from networkx import from_numpy_matrix
 from networkx.algorithms.bipartite.matching import maximum_matching
 import numpy as np
 
@@ -37,7 +37,7 @@ __version__ = '0.0.6.dev0'
 TOLERANCE = np.finfo(np.float).eps * 10.
 
 
-def to_permutation_matrix(matches):
+def to_permutation_matrix(matches, n):
     """Converts a permutation into a permutation matrix.
 
     `matches` is a dictionary whose keys are vertices and whose values are
@@ -50,7 +50,7 @@ def to_permutation_matrix(matches):
     Returns a permutation matrix as a square NumPy array.
 
     """
-    n = len(matches)
+    # n = len(matches)
     P = np.zeros((n, n))
     # This is a cleverer way of doing
     #
@@ -198,7 +198,7 @@ def birkhoff_von_neumann_decomposition(D):
         # is ``W``).
         X = to_bipartite_matrix(W)
         # Convert the matrix of a bipartite graph into a NetworkX graph object.
-        G = from_numpy_array(X)
+        G = from_numpy_matrix(X)
         # Compute a perfect matching for this graph. The dictionary `M` has one
         # entry for each matched vertex (in both the left and the right vertex
         # sets), and the corresponding value is its partner.
@@ -218,9 +218,10 @@ def birkhoff_von_neumann_decomposition(D):
         #     covered by earlier key/value pairs,
         #   - ensure that all values are less than ``n``.
         #
+
         M = {u: v % n for u, v in M.items() if u < n}
         # Convert that perfect matching to a permutation matrix.
-        P = to_permutation_matrix(M)
+        P = to_permutation_matrix(M, n)
         # Get the smallest entry of S corresponding to the 1 entries in the
         # permutation matrix.
         q = min(S[i, j] for (i, j) in indices if P[i, j] == 1)
@@ -234,7 +235,4 @@ def birkhoff_von_neumann_decomposition(D):
         # precision here, so we need to round down to 0 any entry that is very
         # small.
         S[np.abs(S) < TOLERANCE] = 0.0
-        
-    print(coefficients)
-    print(permutations)
-    return tuple(zip(coefficients, permutations))
+    return list(zip(coefficients, permutations))

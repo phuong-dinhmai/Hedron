@@ -3,7 +3,8 @@ scipy==1.10.1
 pandas~=2.0.0
 cvxopt==0.4.3
 # modified version from pymoo
-numpy~=1.24.2
+numpy==1.22.0
+networkx==2.4
 matplotlib~=3.7.1
 tqdm
 

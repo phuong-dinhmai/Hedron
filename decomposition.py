@@ -86,6 +86,6 @@ def doubly_matrix(matrix):
 
 if __name__ == "__main__":
     D = np.ones((2, 2))
-    coef, per = doubly_matrix(D)
+    coef, per = doubly_matrix(D / 4)
     print(coef)
     print(per)
