@@ -16,7 +16,10 @@ def evaluate_probabilty(ranking_probability: np.array, relevance_score: np.array
     gamma = gamma.reshape([n_doc, 1])
     
     user_utilities = np.sum(relevance_score.T @ ranking_probability @ gamma)
-    unfairness = np.sum((item_list.T @ (ranking_probability @ gamma) - fair_exposure) ** 2)
+    unfairness = np.sum((item_list.T @ (ranking_probability @ gamma).T[0] - fair_exposure) ** 2)
+    if unfairness > 50:
+        print(item_list.T @ (ranking_probability @ gamma))
+        print(fair_exposure)
     return user_utilities, unfairness
 
 
