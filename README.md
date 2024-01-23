@@ -24,12 +24,12 @@ In the following we give examples of some common operations.
 ### 2.1. Create and expohedron
 
 ```python
-from expohedron import *
+from main.expohedron import *
 
 # set parameters
 relevance_values = np.array([0.8, 0.8, 0.7, 0.3])
 n = len(relevance_values)
-dcg = 1 / np.log2(np.arange(2, n+2))
+dcg = 1 / np.log2(np.arange(2, n + 2))
 
 # create expohedron
 expohedron = PBMexpohedron(dcg, relevance_values)

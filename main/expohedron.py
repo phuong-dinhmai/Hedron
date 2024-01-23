@@ -7,7 +7,7 @@
 import numpy as np
 from scipy.linalg import orth
 
-from helpers import majorized, invert_permutation, project_on_vector_space
+from main.helpers import majorized, invert_permutation, project_on_vector_space
 
 ULTRA_LOW_TOLERANCE = 5e-3
 LOW_TOLERANCE = 1e-6
@@ -220,7 +220,8 @@ class Expohedron:
             else:
                 upper_bound = center
             if np.all(np.abs(upper_bound - lower_bound) < precision):
-                return self.identify_face(lower_bound).post_correction(lower_bound)
+                return lower_bound
+                # return self.identify_face(lower_bound).post_correction(lower_bound)
             else:
                 pass
     

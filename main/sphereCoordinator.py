@@ -4,6 +4,7 @@ from geomstats.geometry.hypersphere import Hypersphere
 import numpy as np
 from scipy.linalg import norm
 
+
 class BasisTransformer:
 
     def __init__(self, point, basis_vector, compress) -> None:
@@ -79,23 +80,30 @@ class SphereCoordinator:
 
         mid = self.geodesic_sample(s_start_point, s_end_point, 3)[1]
         mid = self.basis_transform.re_transform([mid])[0]
-        corrected_point, s_mid_point = self.post_correction_point(mid, hedron, objs)
+        corrected_point, s_mid_point = self.post_correction_point_2(mid, hedron, objs)
+        # corrected_point, s_mid_point = self.post_correction_point(mid, hedron, objs)
         s_mid_point = self.basis_transform.transform([s_mid_point])[0]
         result += self.geodesic_binary_approximate(n_divided-1, s_start_point, s_mid_point, objs, hedron)
         result.append(corrected_point)
         result += self.geodesic_binary_approximate(n_divided-1, s_mid_point, s_end_point, objs, hedron)
         return result
 
-
     def geodesic_sample(self, s_starting_point, s_end_point, n_point=3):
         geodesic_func = self.hypersphere.metric.geodesic(initial_point=s_starting_point, end_point=s_end_point)
         return geodesic_func(gs.linspace(0, 1, n_point))
-        
 
     def post_correction_point(self, sphere_point, hedron, objs):
         intersect = hedron.find_face_intersection_bisection(self.center_point, sphere_point-self.center_point)
         b = objs.group_masking.T @ intersect
-        pareto_point = objs.convex_constraints_prob(b)
+        pareto_point = objs.optimal_utility_at_fairness_level(b)
+        revert = self.line_intersect_sphere(pareto_point)
+        # print(norm(revert-sphere_point))
+        return pareto_point, revert
+
+    def post_correction_point_2(self, sphere_point, hedron, objs):
+        intersect = hedron.find_face_intersection_bisection(self.center_point, sphere_point - self.center_point)
+        objectives = objs.objectives(intersect)
+        pareto_point = objs.optimal_fairness_at_utility_level(objectives[0])
         revert = self.line_intersect_sphere(pareto_point)
         # print(norm(revert-sphere_point))
         return pareto_point, revert

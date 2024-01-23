@@ -3,6 +3,8 @@ from scipy.linalg import orth, null_space, norm
 import time
 import cvxpy as cp
 
+from evaluation.exposure_evaluation import evaluation, utils, unfairness
+
 ULTRA_LOW_TOLERANCE = 5e-3
 LOW_TOLERANCE = 1e-6
 DEFAULT_TOLERANCE = 1e-9
@@ -178,23 +180,44 @@ class Objective:
         self.pbm = gamma
 
     def utils(self, point):
-        return self.relevance_score @ point
-
+        return utils(point, self.relevance_score)
+    
     def unfairness(self, point):
-        return np.sum((self.group_masking.T @ point - self.target_group_unfairness) ** 2)
+        return unfairness(point, self.group_masking, self.target_group_unfairness)
 
     def objectives(self, point):
-        return self.utils(point), self.unfairness(point)
+        return evaluation(point, self.relevance_score, self.group_masking, self.target_group_unfairness)
 
-    def convex_constraints_prob(self, group_unfairness):
+    def optimal_utility_at_fairness_level(self, group_unfairness):
         n_doc, _ = self.group_masking.shape
         gamma_sum = np.cumsum(self.pbm)
         cp_vars = cp.Variable(n_doc)
         constrs = [cp.sum_largest(cp_vars, i) <= gamma_sum[i - 1] for i in range(1, n_doc)]
         constrs.append(self.group_masking.T @ cp_vars == group_unfairness)
-        obj_func = cp.Maximize(cp.sum(self.relevance_score.T @ cp_vars))
+        obj_func = cp.Maximize(self.relevance_score @ cp_vars)
         prob = cp.Problem(obj_func, constrs)
-        prob.solve(verbose=False)  # Returns the optimal value.
+        prob.solve(verbose=False, max_iters=500)  # Returns the optimal value.
+        # print("status:", prob.status)
+        if prob.status == cp.OPTIMAL:
+            return cp_vars.value
+        return None
+
+    def optimal_fairness_at_utility_level(self, utility):
+        n_doc, _ = self.group_masking.shape
+        gamma_sum = np.cumsum(self.pbm)
+        cp_vars = cp.Variable(n_doc)
+        constrs = [cp.sum_largest(cp_vars, i) <= gamma_sum[i - 1] for i in range(1, n_doc)]
+        constrs.append(self.relevance_score @ cp_vars == utility)
+        constrs.append(cp.sum(cp_vars) == gamma_sum[n_doc-1])
+        obj_func = cp.Minimize(
+            cp.sum_squares(self.group_masking.T @ cp_vars - self.target_group_unfairness)
+           )
+        # constrs.append(cp.sum_squares(self.group_masking.T @ cp_vars
+        #                               - self.target_group_unfairness)
+        #                == group_unfairness)
+        # obj_func = cp.Maximize(self.relevance_score.T @ cp_vars)
+        prob = cp.Problem(obj_func, constrs)
+        prob.solve(verbose=False, max_iters=500)  # Returns the optimal value.
         # print("status:", prob.status)
         if prob.status == cp.OPTIMAL:
             return cp_vars.value

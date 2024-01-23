@@ -151,7 +151,7 @@ def birkhoff_von_neumann_decomposition(D):
     For example::
 
         >>> import numpy as np
-        >>> from birkhoff import birkhoff_von_neumann_decomposition as decomp
+        >>> from main.decompose.birkhoff import birkhoff_von_neumann_decomposition as decomp
         >>> D = np.ones((2, 2))
         >>> zipped_pairs = decomp(D)
         >>> coefficients, permutations = zip(*zipped_pairs)

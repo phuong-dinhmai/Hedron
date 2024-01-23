@@ -2,8 +2,8 @@ import warnings
 
 import numpy as np
 
-from expohedron import Expohedron
-from helpers import invert_permutation, project_on_vector_space
+from main.expohedron import Expohedron
+from main.helpers import invert_permutation, project_on_vector_space
 
 from birkhoff import birkhoff_von_neumann_decomposition
 
@@ -85,7 +85,32 @@ def doubly_matrix(matrix):
 
 
 if __name__ == "__main__":
-    D = np.ones((2, 2))
-    coef, per = doubly_matrix(D / 4)
-    print(coef)
-    print(per)
+    import random
+    from baseline.LP import experiment
+
+    n_doc = 100
+    n_group = 100
+    np.random.seed(8)
+    relevance_score = np.arange(1, n_doc+1) / n_doc
+    # relevance_score = np.random.rand(n_doc)
+    # np.savetxt("data/relevance_score.csv", relevance_score, delimiter=",")
+
+    item_list = np.zeros((n_doc, n_group))
+    for i in range(n_doc):
+        j = random.randint(0, n_group - 1)
+        item_list[i][j] = 1
+
+    gamma = 1 / np.log(np.arange(0, n_doc) + 2)
+    cnt_col = item_list.sum(axis=0)
+    item_list = np.delete(item_list, cnt_col == 0, 1)
+    group_size = item_list.sum(axis=0)
+    print(group_size)
+    group_fairness = group_size / np.sum(group_size) * np.sum(gamma)
+
+    results, objs = experiment(relevance_score, item_list, group_fairness)
+    print(np.any(results) < 0)
+    # start = time.time()
+    # coef, per = doubly_matrix(results)
+    # end = time.time()
+    # print(coef)
+    # print(end - start)

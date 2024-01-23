@@ -3,13 +3,9 @@ import pandas as pd
 
 from scipy.linalg import null_space, norm, orth
 
-from helpers import project_point_on_plane, project_on_vector_space, invert_permutation, intersect_vector_space
-from helpers import Objective, project_vector_on_subspace
-from sphereCoordinator import BasisTransformer, SphereCoordinator
-from expohedron import find_face_subspace_without_parent_2, update_face_by_point, Expohedron
-
-
-HIGH_TOLERANCE = 1e-12
+from main.helpers import project_on_vector_space, invert_permutation, intersect_vector_space
+from main.helpers import Objective, project_vector_on_subspace
+from main.expohedron import find_face_subspace_without_parent_2, update_face_by_point, Expohedron
 
 
 def projected_path(relevance_score: np.ndarray, item_group_masking: np.ndarray, group_fairness: np.ndarray, gamma: np.ndarray):
@@ -17,7 +13,7 @@ def projected_path(relevance_score: np.ndarray, item_group_masking: np.ndarray, 
     hedron = Expohedron(gamma)
     objs = Objective(relevance_score, group_fairness, item_group_masking, gamma)
 
-    if n_doc < 12:
+    if n_doc < 70:
         expohedron_complement = np.asarray([[1.0] * n_doc])
         x = intersect_vector_space(null_space(expohedron_complement), item_group_masking).T
 
@@ -26,7 +22,7 @@ def projected_path(relevance_score: np.ndarray, item_group_masking: np.ndarray, 
     objectives = []
 
     nb_iteration = 0
-    pareto_point = objs.convex_constraints_prob(group_fairness)
+    pareto_point = objs.optimal_utility_at_fairness_level(group_fairness)
     assert hedron.contains(pareto_point), "Projection went wrong, new point is out of the hedron."
 
     objectives.append(objs.objectives(pareto_point))
@@ -56,7 +52,7 @@ def projected_path(relevance_score: np.ndarray, item_group_masking: np.ndarray, 
             intersect_point = hedron.find_face_intersection_bisection(pareto_point, check_dir)
 
             # Post-correction for small N
-            if n_doc < 12:
+            if n_doc < 70:
                 y = null_space(_face_orth.T)
                 check = intersect_vector_space(null_space(relevance_score.reshape((1, n_doc))), y)
                 if check.shape[1] != 0:
@@ -92,40 +88,9 @@ def projected_path(relevance_score: np.ndarray, item_group_masking: np.ndarray, 
         objectives.append(objs.objectives(next_point))
         pareto_point = next_point
         face_orth = next_face
-
-    # print(objectives)
-    return objectives, pareto_set
-
-
-def sphere_path(relevance_score: np.ndarray, item_group_masking: np.ndarray, group_fairness: np.ndarray, gamma: np.ndarray, n_divided=3, n_sample=5):
-    n_doc, _ = item_group_masking.shape
-
-    expohedron_complement = np.asarray([[1.0] * n_doc])
-    hedron = Expohedron(gamma)
-    objs = Objective(relevance_score, group_fairness, item_group_masking, gamma)
-
-    # print('Initiate point')
-    center_point = np.asarray([gamma.sum() / n_doc] * n_doc)
-    initiate_fair_point = project_point_on_plane(center_point, item_group_masking, group_fairness)
-    assert hedron.contains(initiate_fair_point), "Initiate point is not in the expohedron"
-
-    # print("Start search for pareto front")
-
     end_point = gamma[invert_permutation(np.argsort(-relevance_score))]
-    radius = norm(center_point - end_point)
-
-    b = item_group_masking.T @ initiate_fair_point
-    pareto_point = objs.convex_constraints_prob(b)
-    assert hedron.contains(pareto_point), "Projection went wrong, new point is out of the hedron."
-
-    basis_transform = BasisTransformer(center_point, null_space(expohedron_complement), compress=radius)
-    sphere_coor = SphereCoordinator(center_point, radius, basis_transform, n_sample)
-
-    t_starting_point, t_end_point = basis_transform.transform([sphere_coor.line_intersect_sphere(pareto_point), end_point])
-
-    pareto_set = sphere_coor.geodesic_binary_approximate(n_divided, t_starting_point, t_end_point, objs, hedron)
-    pareto_set = [pareto_point,] + pareto_set + [end_point,]
-    objectives = [objs.objectives(point) for point in pareto_set]
+    pareto_set.append(end_point)
+    objectives.append(objs.objectives(end_point))
 
     # print(objectives)
     return objectives, pareto_set
