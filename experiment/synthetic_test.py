@@ -6,6 +6,11 @@ import numpy as np
 import matplotlib.pyplot as plt
 import scipy.stats as st
 
+import sys
+import os
+
+sys.path.append(os.path.dirname(os.path.dirname(__file__)))
+
 from data.synthetic.load_data import load_data
 from main.projected_testing import projected_path
 from main.sphere_testing import sphere_path
@@ -15,14 +20,12 @@ from evaluation.exposure_evaluation import evaluation, normalize_evaluation
 from baseline import QP
 
 
-def draw(check_curve, optimal_curve):
-    check_curve = np.asarray(check_curve)
-    optimal_curve = np.asarray(optimal_curve)
-    optimal_curve = optimal_curve[optimal_curve[:, 1].argsort()]
-    # check_curve = check_curve[check_curve[:, 1].argsort()]
+def draw(curves, names):
+    for i in range(len(names)):
+        curve = np.array(curves[i])
+        name = names[i]
+        plt.scatter(curve[:, 1], curve[:, 0], label=name)
 
-    plt.plot(optimal_curve[:, 1], optimal_curve[:, 0], label="optimal_curve")
-    plt.plot(check_curve[:, 1], check_curve[:, 0], label="check_curve")
     plt.ylabel("User utility")
     plt.xlabel("Unfairness")
     plt.legend(loc='lower right')
@@ -30,14 +33,17 @@ def draw(check_curve, optimal_curve):
 
 
 def single_test(n_doc, n_group):
-    rel, item_group_masking, group_fairness, gamma = load_data(n_doc, n_group)
+    rel, item_group_masking, group_fairness, gamma = load_data(n_doc, n_group, n_doc)
 
-    # obj, points = projected_path(rel, item_group_masking, group_fairness, gamma)
-    obj, points = sphere_path(rel, item_group_masking, group_fairness, gamma, 2)
+    p_obj, p_points = projected_path(rel, item_group_masking, group_fairness, gamma)
+    # s_obj, s_points = sphere_path(rel, item_group_masking, group_fairness, gamma, 3)
 
     # baseline
-    qp_objs, qp_points = QP.experiment(rel, item_group_masking, group_fairness, np.arange(1, 21) / 20)
-    draw(obj, qp_objs)
+    qp_objs, qp_points = QP.experiment(rel, item_group_masking, gamma, group_fairness, np.arange(1, 21) / 20)
+    # 
+    # draw([qp_objs, p_obj, s_obj], ["baseline", "P-Expo", "Spher-Expo_3"])
+
+    draw([qp_objs, p_obj], ["baseline", "P-Expo"])
 
 
 def s_short_cut_accuracy(n_doc, n_group):
@@ -172,7 +178,9 @@ def massive_running_time_test(n_item_group_range, repeated_time, file_name):
 
 
 if __name__ == "__main__":
-    # single_test(10, 5)
+    single_test(30, 6)
+
+    exit(0)
     # s_short_cut_accuracy(10, 5)
     from main.helpers import invert_permutation
 
@@ -185,17 +193,17 @@ if __name__ == "__main__":
     alpha_arr = np.arange(1, 21) / 20
     qp_objs, qp_points = QP.experiment(rel, item_group_masking, _gamma, group_fairness, alpha_arr)
 
-    optimal_util_point = _gamma[invert_permutation(np.argsort(-rel))]
-    for i in range(len(alpha_arr)):
-        alpha = alpha_arr[i]
-        point, normalize_objs = get_pareto_point_for_scalarization(points, group_fairness, alpha, rel,
-                                                                   item_group_masking, optimal_util_point)
-        opt_exposure = qp_points[i] @ _gamma
-        expo_util, expo_unfair = normalize_evaluation(point, rel, item_group_masking,
-                                                      group_fairness, optimal_util_point)
-        opt_util, opt_unfair = normalize_evaluation(opt_exposure, rel, item_group_masking,
-                                                    group_fairness, optimal_util_point)
-        print(expo_util - opt_util, " ", expo_unfair - opt_unfair)
-        print(alpha * opt_util - (1-alpha) * opt_unfair, " ", alpha * expo_util - (1-alpha) * expo_unfair)
+    # optimal_util_point = _gamma[invert_permutation(np.argsort(-rel))]
+    # for i in range(len(alpha_arr)):
+    #     alpha = alpha_arr[i]
+    #     point, normalize_objs = get_pareto_point_for_scalarization(points, group_fairness, alpha, rel,
+    #                                                                item_group_masking, optimal_util_point)
+    #     opt_exposure = qp_points[i] @ _gamma
+    #     expo_util, expo_unfair = normalize_evaluation(point, rel, item_group_masking,
+    #                                                   group_fairness, optimal_util_point)
+    #     opt_util, opt_unfair = normalize_evaluation(opt_exposure, rel, item_group_masking,
+    #                                                 group_fairness, optimal_util_point)
+    #     # print(expo_util - opt_util, " ", expo_unfair - opt_unfair)
+    #     # print(alpha * opt_util - (1-alpha) * opt_unfair, " ", alpha * expo_util - (1-alpha) * expo_unfair)
 
 

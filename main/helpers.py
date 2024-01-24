@@ -178,6 +178,7 @@ class Objective:
         self.target_group_unfairness = group_fairness
         self.group_masking = group_masking
         self.pbm = gamma
+        self.gamma_sum = np.cumsum(self.pbm)
 
     def utils(self, point):
         return utils(point, self.relevance_score)
@@ -190,9 +191,8 @@ class Objective:
 
     def optimal_utility_at_fairness_level(self, group_unfairness):
         n_doc, _ = self.group_masking.shape
-        gamma_sum = np.cumsum(self.pbm)
         cp_vars = cp.Variable(n_doc)
-        constrs = [cp.sum_largest(cp_vars, i) <= gamma_sum[i - 1] for i in range(1, n_doc)]
+        constrs = [cp.sum_largest(cp_vars, i) <= self.gamma_sum[i - 1] for i in range(1, n_doc)]
         constrs.append(self.group_masking.T @ cp_vars == group_unfairness)
         obj_func = cp.Maximize(self.relevance_score @ cp_vars)
         prob = cp.Problem(obj_func, constrs)
@@ -204,11 +204,11 @@ class Objective:
 
     def optimal_fairness_at_utility_level(self, utility):
         n_doc, _ = self.group_masking.shape
-        gamma_sum = np.cumsum(self.pbm)
+       
         cp_vars = cp.Variable(n_doc)
-        constrs = [cp.sum_largest(cp_vars, i) <= gamma_sum[i - 1] for i in range(1, n_doc)]
+        constrs = [cp.sum_largest(cp_vars, i) <= self.gamma_sum[i - 1] for i in range(1, n_doc)]
         constrs.append(self.relevance_score @ cp_vars == utility)
-        constrs.append(cp.sum(cp_vars) == gamma_sum[n_doc-1])
+        constrs.append(cp.sum(cp_vars) == self.gamma_sum[n_doc-1])
         obj_func = cp.Minimize(
             cp.sum_squares(self.group_masking.T @ cp_vars - self.target_group_unfairness)
            )
@@ -222,6 +222,17 @@ class Objective:
         if prob.status == cp.OPTIMAL:
             return cp_vars.value
         return None
+    
+    def custom_optimal(self, a, b):
+        n_doc, _ = self.group_masking.shape
+        cp_vars = cp.Variable(n_doc)
+        constrs = [(a.T @ cp_vars == b)]
+        obj_func = cp.Maximize(self.relevance_score @ cp_vars)
+        prob = cp.Problem(obj_func, constrs)
+        prob.solve(verbose=False, solver=cp.SCS, max_iters=500)  # Returns the optimal value.
+        # print("status:", prob.status)
+        if prob.status == cp.OPTIMAL:
+            return cp_vars.value
 
 
 if __name__ == "__main__":
