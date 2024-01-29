@@ -187,7 +187,7 @@ class Objective:
         return unfairness(point, self.group_masking, self.target_group_unfairness)
 
     def objectives(self, point):
-        return evaluation(point, self.relevance_score, self.group_masking, self.target_group_unfairness)
+        return evaluation(point, self.relevance_score, self.group_masking, self.target_group_unfairness, None)
 
     def optimal_utility_at_fairness_level(self, group_unfairness):
         n_doc, _ = self.group_masking.shape
@@ -196,7 +196,7 @@ class Objective:
         constrs.append(self.group_masking.T @ cp_vars == group_unfairness)
         obj_func = cp.Maximize(self.relevance_score @ cp_vars)
         prob = cp.Problem(obj_func, constrs)
-        prob.solve(verbose=False, max_iters=500)  # Returns the optimal value.
+        prob.solve(verbose=False, solver=cp.SCIPY, scipy_options={'method':'highs-ds', 'maxiter':10000})  # Returns the optimal value.
         # print("status:", prob.status)
         if prob.status == cp.OPTIMAL:
             return cp_vars.value
@@ -210,29 +210,28 @@ class Objective:
         constrs.append(self.relevance_score @ cp_vars == utility)
         constrs.append(cp.sum(cp_vars) == self.gamma_sum[n_doc-1])
         obj_func = cp.Minimize(
-            cp.sum_squares(self.group_masking.T @ cp_vars - self.target_group_unfairness)
+            cp.norm(self.group_masking.T @ cp_vars - self.target_group_unfairness)
            )
         # constrs.append(cp.sum_squares(self.group_masking.T @ cp_vars
         #                               - self.target_group_unfairness)
         #                == group_unfairness)
         # obj_func = cp.Maximize(self.relevance_score.T @ cp_vars)
         prob = cp.Problem(obj_func, constrs)
-        prob.solve(verbose=False, max_iters=500)  # Returns the optimal value.
+        prob.solve(verbose=False, max_iters=10000)  # Returns the optimal value.
         # print("status:", prob.status)
         if prob.status == cp.OPTIMAL:
             return cp_vars.value
         return None
     
     def custom_optimal(self, a, b):
+        # print(cp.installed_solvers())
         n_doc, _ = self.group_masking.shape
         cp_vars = cp.Variable(n_doc)
-        constrs = [(a.T @ cp_vars == b)]
+        constrs = [a.T @ cp_vars == b, cp_vars <= self.pbm[0]]
         obj_func = cp.Maximize(self.relevance_score @ cp_vars)
         prob = cp.Problem(obj_func, constrs)
-        prob.solve(verbose=False, solver=cp.SCS, max_iters=500)  # Returns the optimal value.
-        # print("status:", prob.status)
-        if prob.status == cp.OPTIMAL:
-            return cp_vars.value
+        prob.solve(verbose=False, solver=cp.SCIPY, scipy_options={'method':'highs-ds', 'maxiter':10000})  # Returns the optimal value.
+        return prob.status, cp_vars.value
 
 
 if __name__ == "__main__":

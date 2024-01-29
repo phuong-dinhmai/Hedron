@@ -42,8 +42,8 @@ class QP:
         self.constraints.append(cp.sum(self.ranking_probability, axis=0) == np.ones(n_doc))
         self.constraints.append(cp.sum(self.ranking_probability, axis=1) == np.ones(n_doc))
 
-        obj_func = self.alpha * self.normalize_utils(self.ranking_probability) - \
-                   (1-self.alpha) * self.normalize_unfairness(self.ranking_probability)
+        obj_func = self.alpha * self.utils(self.ranking_probability) - \
+                   (1-self.alpha) * self.unfairness(self.ranking_probability)
 
         self.obj_func = cp.Maximize(obj_func)
 
@@ -89,10 +89,10 @@ def experiment(relevance_score: np.ndarray, item_list: np.ndarray, gamma: np.nda
         except Exception as e:
             print("Error at alpha: ", alpha)
             print(e)
-            # pareto_set.append(None)
-            # pareto_front.append(None)
+            pareto_set.append(None)
+            pareto_front.append((None, None))
         
-    print(pareto_front)
+    # print(pareto_front)
 
     return pareto_front, pareto_set
 

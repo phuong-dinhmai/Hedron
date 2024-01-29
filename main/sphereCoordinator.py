@@ -71,16 +71,16 @@ class SphereCoordinator:
 
     def geodesic_binary_approximate(self, n_divided, s_start_point, s_end_point, objs, hedron):
         result = []
-        if n_divided == 0:
+        if n_divided <= 0:
             s_points = self.geodesic_sample(s_start_point, s_end_point, self.n_sample_in_geodesic)
             s_points = self.basis_transform.re_transform(s_points)
             for point in s_points:
                 result.append(hedron.find_face_intersection_bisection(self.center_point, point-self.center_point))
             return result
 
-        mid = self.geodesic_sample(s_start_point, s_end_point, 3)[1]
-        mid = self.basis_transform.re_transform([mid])[0]
-        corrected_point, s_mid_point = self.post_correction_point_2(mid, hedron, objs)
+        # mid = self.geodesic_sample(s_start_point, s_end_point, 3)[1]
+        # mid = self.basis_transform.re_transform([mid])[0]
+        corrected_point, s_mid_point = self.post_correction_point_2(s_start_point, s_end_point, hedron, objs)
         # corrected_point, s_mid_point = self.post_correction_point(mid, hedron, objs)
         s_mid_point = self.basis_transform.transform([s_mid_point])[0]
         result += self.geodesic_binary_approximate(n_divided-1, s_start_point, s_mid_point, objs, hedron)
@@ -100,10 +100,14 @@ class SphereCoordinator:
         # print(norm(revert-sphere_point))
         return pareto_point, revert
 
-    def post_correction_point_2(self, sphere_point, hedron, objs):
-        intersect = hedron.find_face_intersection_bisection(self.center_point, sphere_point - self.center_point)
-        objectives = objs.objectives(intersect)
-        pareto_point = objs.optimal_fairness_at_utility_level(objectives[0])
+    def post_correction_point_2(self, s_start_point, s_end_point, hedron, objs):
+        start_point, end_point = self.basis_transform.re_transform([s_start_point, s_end_point])
+
+        start_point = hedron.find_face_intersection_bisection(self.center_point, start_point - self.center_point)
+        end_point = hedron.find_face_intersection_bisection(self.center_point, end_point - self.center_point)
+        mid_utils = (objs.utils(start_point) + objs.utils(end_point)) / 2
+        
+        pareto_point = objs.optimal_fairness_at_utility_level(mid_utils)
         revert = self.line_intersect_sphere(pareto_point)
         # print(norm(revert-sphere_point))
         return pareto_point, revert

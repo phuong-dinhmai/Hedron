@@ -35,7 +35,7 @@ def scalarized_objective_within_pareto_segment(alpha: float, scalarization: floa
     :rtype: float
     """
     exposure = alpha * point1 + (1-alpha) * point2
-    n_utils, n_unfair = normalize_evaluation(exposure, relevance_vector, item_list, target_exposure, optimal_util_point)
+    n_utils, n_unfair = evaluation(exposure, relevance_vector, item_list, target_exposure, optimal_util_point)
     return scalarization * (-n_utils) + (1-scalarization) * n_unfair
 
 
@@ -65,7 +65,7 @@ def get_pareto_point_for_scalarization(pareto_curve: list, target_exposure: np.n
     """
 
     def objective(exposure):
-        n_utils, n_unfair = normalize_evaluation(exposure, relevance_vector, item_list, target_exposure,
+        n_utils, n_unfair = evaluation(exposure, relevance_vector, item_list, target_exposure,
                                                  optimal_util_point)
         return alpha * (-n_utils) + (1-alpha) * n_unfair
 
@@ -74,6 +74,7 @@ def get_pareto_point_for_scalarization(pareto_curve: list, target_exposure: np.n
     if len(pareto_curve) == 1:  # pathological case
         exposure_opt = pareto_curve[0]
         return normalize_evaluation(exposure_opt, relevance_vector, item_list, target_exposure, optimal_util_point)
+
     for i in np.arange(0, len(pareto_curve)-1):
         o1 = objective(pareto_curve[i])
         o2 = objective(pareto_curve[i+1])

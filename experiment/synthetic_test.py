@@ -5,6 +5,7 @@ from tqdm import tqdm
 import numpy as np
 import matplotlib.pyplot as plt
 import scipy.stats as st
+from scipy.linalg import norm, null_space
 
 import sys
 import os
@@ -16,6 +17,7 @@ from main.projected_testing import projected_path
 from main.sphere_testing import sphere_path
 from evaluation.exposure_to_bistochastic import get_pareto_point_for_scalarization
 from evaluation.exposure_evaluation import evaluation, normalize_evaluation
+from evaluation.sphere_evaluation import sphere_get_pareto_point_for_scalarization
 
 from baseline import QP
 
@@ -24,7 +26,7 @@ def draw(curves, names):
     for i in range(len(names)):
         curve = np.array(curves[i])
         name = names[i]
-        plt.scatter(curve[:, 1], curve[:, 0], label=name)
+        plt.plot(curve[:, 1], curve[:, 0], marker='o', label=name)
 
     plt.ylabel("User utility")
     plt.xlabel("Unfairness")
@@ -36,90 +38,18 @@ def single_test(n_doc, n_group):
     rel, item_group_masking, group_fairness, gamma = load_data(n_doc, n_group, n_doc)
 
     p_obj, p_points = projected_path(rel, item_group_masking, group_fairness, gamma)
-    # s_obj, s_points = sphere_path(rel, item_group_masking, group_fairness, gamma, 3)
+    # s_0_obj, s_0_points = sphere_path(rel, item_group_masking, group_fairness, gamma, 0, 20)
+    # s_1_obj, s_1_points = sphere_path(rel, item_group_masking, group_fairness, gamma, 1, 10)
+    s_2_obj, s_2_points = sphere_path(rel, item_group_masking, group_fairness, gamma, 4, 5)
+    # s_3_obj, s_3_points = sphere_path(rel, item_group_masking, group_fairness, gamma, 3, 2)
 
     # baseline
     qp_objs, qp_points = QP.experiment(rel, item_group_masking, gamma, group_fairness, np.arange(1, 21) / 20)
     # 
-    # draw([qp_objs, p_obj, s_obj], ["baseline", "P-Expo", "Spher-Expo_3"])
+    draw([qp_objs, p_obj, s_2_obj], ["baseline", "P-Expo", "Sphere-Expo_2"])
 
-    draw([qp_objs, p_obj], ["baseline", "P-Expo"])
-
-
-def s_short_cut_accuracy(n_doc, n_group):
-    rel, item_group, group_fairness, gamma = load_data(n_doc, n_group)
-
-    start = time.time()
-    s3_objs, s3_points, sphere_coor, objs, hedron = sphere_path(rel, item_group,
-                                                                group_fairness,
-                                                                gamma, n_divided=3,
-                                                                n_sample=6)
-    center_point = np.asarray([gamma.sum() / n_doc] * n_doc)
-    end = time.time()
-    print(end - start)
-
-    t_start = sphere_coor.basis_transform.transform([s3_points[0]])[0]
-    t_end = sphere_coor.basis_transform.transform([s3_points[56]])[0]
-    pareto_set = sphere_coor.geodesic_sample(t_start, t_end, 55)
-    pareto_set = list(sphere_coor.basis_transform.re_transform(pareto_set))
-    spoints = [s3_points[0]]
-    for point in pareto_set:
-        spoints.append(hedron.find_face_intersection_bisection(center_point, point - center_point))
-    spoints.append(s3_points[56])
-    _sobjs = np.array([list(objs.objectives(spoint)) for spoint in spoints])
-    sobjs = [_sobjs[0]]
-    for i in range(0, len(_sobjs) - 1):
-        if _sobjs[i, 0] > _sobjs[i + 1, 0] or _sobjs[i, 1] > _sobjs[i + 1, 1]:
-            continue
-        sobjs.append(_sobjs[i + 1])
-    sobjs = np.array(sobjs)
-
-    marked_points_ids = [0, 28, 56]
-    x = [s3_points[i] for i in marked_points_ids]
-    t_point = sphere_coor.basis_transform.transform(x)
-    s1_points = [s3_points[0]]
-    for i in range(2):
-        pareto_set = sphere_coor.geodesic_sample(t_point[i], t_point[i + 1], 27)
-        pareto_set = list(sphere_coor.basis_transform.re_transform(pareto_set))
-        for point in pareto_set:
-            s1_points.append(hedron.find_face_intersection_bisection(center_point, point - center_point))
-        s1_points.append(s3_points[marked_points_ids[i + 1]])
-    _s1_objs = np.array([list(objs.objectives(spoint)) for spoint in s1_points])
-    s1_objs = [_s1_objs[0]]
-    for i in range(0, len(_s1_objs) - 1):
-        if _s1_objs[i, 0] > _s1_objs[i + 1, 0] or _s1_objs[i, 1] > _s1_objs[i + 1, 1]:
-            continue
-        s1_objs.append(_s1_objs[i + 1])
-    s1_objs = np.array(s1_objs)
-
-    marked_points_ids = [0, 14, 28, 42, 56]
-    x = [s3_points[i] for i in marked_points_ids]
-    t_point = sphere_coor.basis_transform.transform(x)
-    s2_points = [s3_points[0]]
-    for i in range(4):
-        pareto_set = sphere_coor.geodesic_sample(t_point[i], t_point[i + 1], 13)
-        pareto_set = list(sphere_coor.basis_transform.re_transform(pareto_set))
-        for point in pareto_set:
-            s2_points.append(hedron.find_face_intersection_bisection(center_point, point - center_point))
-        s2_points.append(s3_points[marked_points_ids[i + 1]])
-    _s2_objs = np.array([list(objs.objectives(spoint)) for spoint in s2_points])
-    s2_objs = [_s2_objs[0]]
-    for i in range(0, len(_s1_objs) - 1):
-        if _s2_objs[i, 0] > _s2_objs[i + 1, 0] or _s2_objs[i, 1] > _s2_objs[i + 1, 1]:
-            continue
-        s2_objs.append(_s2_objs[i + 1])
-    s2_objs = np.array(s2_objs)
-
-    s3_objs = np.array(s3_objs)
-    plt.plot(sobjs[:, 1], sobjs[:, 0], label="SphereExpo_0_marker", marker="o")
-    plt.plot(s1_objs[:, 1], s1_objs[:, 0], label="SphereExpo_1_marker", marker="o")
-    # plt.plot(s1_check_objs[:, 1], s1_check_objs[:, 0], label="SphereExpo_1_check")
-    plt.plot(s2_objs[:, 1], s2_objs[:, 0], label="SphereExpo_2_marker", marker="o")
-    plt.plot(s3_objs[:, 1], s3_objs[:, 0], label="SphereExpo_3_marker", marker="o")
-    plt.ylabel("User utility")
-    plt.xlabel("Unfairness")
-    plt.legend(loc='lower right')
-    plt.show()
+    # draw([qp_objs, p_obj, s_0_obj, s_1_obj, s_2_obj, s_3_obj], 
+    #      ["QP", "P-Expo", "Sphere-Expo_0", "Sphere-Expo_1", "Sphere-Expo_3", "Sphere-Expo_7"])
 
 
 def massive_running_time_test(n_item_group_range, repeated_time, file_name):
@@ -127,7 +57,7 @@ def massive_running_time_test(n_item_group_range, repeated_time, file_name):
         "s_0_markers": {"bound": [], "mean": []},
         "s_1_markers": {"bound": [], "mean": []},
         "s_3_markers": {"bound": [], "mean": []},
-        "s_5_markers": {"bound": [], "mean": []},
+        "s_7_markers": {"bound": [], "mean": []},
         "qp_bistochastic": {"bound": [], "mean": []},
         "qp_expohedron": {"bound": [], "mean": []},
         "p_expo": {"bound": [], "mean": []}
@@ -137,7 +67,7 @@ def massive_running_time_test(n_item_group_range, repeated_time, file_name):
             "s_0_markers": [],
             "s_1_markers": [],
             "s_3_markers": [],
-            "s_5_markers": [],
+            "s_7_markers": [],
             "qp_bistochastic": [],
             "qp_expohedron": [],
             "p_expo": []
@@ -177,33 +107,86 @@ def massive_running_time_test(n_item_group_range, repeated_time, file_name):
         json.dump(n_item_group_range, f_out)
 
 
+def aggregation_test(n_doc_range):
+    results = {
+        "alpha": np.arange(1, 21) / 20,
+        "qp": [[] for i in range(20)],
+        "p_expo": [[] for i in range(20)],
+        "s_expo_1": [[] for i in range(20)],
+        "s_expo_2": [[] for i in range(20)],
+        "s_expo_3": [[] for i in range(20)]
+    }
+    for n_doc in n_doc_range:
+        print(n_doc)
+        # n_group = np.random.randint(3, n_doc-2)
+        n_group = 3
+        rel, item_group_masking, group_fairness, gamma = load_data(n_doc, n_group)
+
+        p_obj, p_points = projected_path(rel, item_group_masking, group_fairness, gamma)
+        qp_objs, qp_points = QP.experiment(rel, item_group_masking, gamma, group_fairness, results["alpha"])
+        s_1_obj, s_1_points = sphere_path(rel, item_group_masking, group_fairness, gamma, 1, 3)
+        s_2_obj, s_2_points = sphere_path(rel, item_group_masking, group_fairness, gamma, 2, 3)
+        s_3_obj, s_3_points = sphere_path(rel, item_group_masking, group_fairness, gamma, 3, 3)
+        optimal_util_point = p_points[-1]
+        # draw([qp_objs, p_obj, s_3_obj], ["baseline", "P-Expo", "Sphere-Expo_2"])
+
+        for i in range(0, len(results["alpha"])):
+            alpha = results["alpha"][i]
+            point, objs = get_pareto_point_for_scalarization(p_points, group_fairness, alpha, rel, item_group_masking, optimal_util_point)
+            results["p_expo"][i].append(objs)
+            optimal = qp_points[i] @ gamma
+            results["qp"][i].append(normalize_evaluation(optimal, rel, item_group_masking, group_fairness, optimal_util_point))
+
+            point, objs = sphere_get_pareto_point_for_scalarization(s_1_points, gamma, group_fairness, optimal, rel, item_group_masking, optimal_util_point)
+            results["s_expo_1"][i].append(objs)
+            point, objs = sphere_get_pareto_point_for_scalarization(s_2_points, gamma, group_fairness, optimal, rel, item_group_masking, optimal_util_point)
+            results["s_expo_2"][i].append(objs)
+            point, objs = sphere_get_pareto_point_for_scalarization(s_3_points, gamma, group_fairness, optimal, rel, item_group_masking, optimal_util_point)
+            results["s_expo_3"][i].append(objs)
+            # raise Exception("test")
+
+    aggregation_result = {
+        "qp": [],
+        "p_expo": [],
+        "s_expo_1": [],
+        "s_expo_2": [],
+        "s_expo_3": [],
+    }
+
+    for i in range(len(results["alpha"])):
+        aggregation_result["qp"].append(np.mean(np.array(results["qp"][i]), axis=0))
+        aggregation_result["p_expo"].append(np.mean(np.array(results["p_expo"][i]), axis=0))
+        aggregation_result["s_expo_1"].append(np.mean(np.array(results["s_expo_1"][i]), axis=0))
+        aggregation_result["s_expo_2"].append(np.mean(np.array(results["s_expo_2"][i]), axis=0))
+        aggregation_result["s_expo_3"].append(np.mean(np.array(results["s_expo_3"][i]), axis=0))
+
+
+    aggregation_result["qp"] = np.array(aggregation_result["qp"])
+    aggregation_result["p_expo"] = np.array(aggregation_result["p_expo"])
+    aggregation_result["s_expo_1"] = np.array(aggregation_result["s_expo_1"])
+    aggregation_result["s_expo_2"] = np.array(aggregation_result["s_expo_2"])
+    aggregation_result["s_expo_3"] = np.array(aggregation_result["s_expo_3"])
+    # print(aggregation_result["p_expo"])
+    # print(aggregation_result["qp"])
+    # print(aggregation_result["s_expo_3"])
+
+    plt.plot(aggregation_result["p_expo"][:, 1], aggregation_result["p_expo"][:, 0], marker='o', label="P-Expo")
+    plt.plot(aggregation_result["qp"][:, 1], aggregation_result["qp"][:, 0], marker='o', label="QP")
+    plt.plot(aggregation_result["s_expo_1"][:, 1], aggregation_result["s_expo_1"][:, 0], marker='o', label="Sphere-Expo_1")
+    plt.plot(aggregation_result["s_expo_2"][:, 1], aggregation_result["s_expo_2"][:, 0], marker='o', label="Sphere-Expo_5")
+    plt.plot(aggregation_result["s_expo_3"][:, 1], aggregation_result["s_expo_3"][:, 0], marker='o', label="Sphere-Expo_7")
+    plt.ylabel("Normalized User utility")
+    plt.xlabel("Normalized Unfairness")
+    plt.legend(loc='lower right')
+    plt.show()
+
 if __name__ == "__main__":
-    single_test(30, 6)
-
-    exit(0)
-    # s_short_cut_accuracy(10, 5)
-    from main.helpers import invert_permutation
-
-    rel, item_group_masking, group_fairness, _gamma = load_data(10, 5)
-
-    obj, points = projected_path(rel, item_group_masking, group_fairness, _gamma)
-    # obj, points = sphere_path(rel, item_group_masking, group_fairness, _gamma, 2)
-
-    # baseline
-    alpha_arr = np.arange(1, 21) / 20
-    qp_objs, qp_points = QP.experiment(rel, item_group_masking, _gamma, group_fairness, alpha_arr)
-
-    # optimal_util_point = _gamma[invert_permutation(np.argsort(-rel))]
-    # for i in range(len(alpha_arr)):
-    #     alpha = alpha_arr[i]
-    #     point, normalize_objs = get_pareto_point_for_scalarization(points, group_fairness, alpha, rel,
-    #                                                                item_group_masking, optimal_util_point)
-    #     opt_exposure = qp_points[i] @ _gamma
-    #     expo_util, expo_unfair = normalize_evaluation(point, rel, item_group_masking,
-    #                                                   group_fairness, optimal_util_point)
-    #     opt_util, opt_unfair = normalize_evaluation(opt_exposure, rel, item_group_masking,
-    #                                                 group_fairness, optimal_util_point)
-    #     # print(expo_util - opt_util, " ", expo_unfair - opt_unfair)
-    #     # print(alpha * opt_util - (1-alpha) * opt_unfair, " ", alpha * expo_util - (1-alpha) * expo_unfair)
-
-
+    n_doc = 14
+    n_group = 3
+    # # n_group = np.random.randint(3, n_doc-2)
+    # # print(n_group)
+    single_test(n_doc, n_group)
+    # aggregation_test(np.arange(8, 32))
+    # for n_doc in np.arange(8, 10):
+    #     n_group = np.random.randint(3, n_doc-2)
+    #     single_test(n_doc, n_group)

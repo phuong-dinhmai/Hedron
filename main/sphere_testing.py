@@ -27,6 +27,7 @@ def sphere_path(relevance_score: np.ndarray, item_group_masking: np.ndarray, gro
     # print("Start search for pareto front")
 
     end_point = gamma[invert_permutation(np.argsort(-relevance_score))]
+    end_point = objs.optimal_fairness_at_utility_level(objs.utils(end_point))
     radius = norm(center_point - end_point)
 
     b = item_group_masking.T @ initiate_fair_point
@@ -42,5 +43,5 @@ def sphere_path(relevance_score: np.ndarray, item_group_masking: np.ndarray, gro
     pareto_set = [pareto_point,] + pareto_set + [end_point,]
     objectives = [objs.objectives(point) for point in pareto_set]
 
-    print(objectives)
+    # print(objectives)
     return objectives, pareto_set

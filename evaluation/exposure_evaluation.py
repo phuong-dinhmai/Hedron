@@ -10,7 +10,7 @@ def unfairness(exposure: np.ndarray, item_list: np.array, fair_exposure):
 
 
 def evaluation(exposure: np.array, relevance_score: np.array,
-               item_list: np.array, fair_exposure):
+               item_list: np.array, fair_exposure, args):
     user_utilities = utils(exposure, relevance_score)
     unfairness_val = unfairness(exposure, item_list, fair_exposure)
     return user_utilities, unfairness_val
@@ -18,6 +18,6 @@ def evaluation(exposure: np.array, relevance_score: np.array,
 
 def normalize_evaluation(exposure: np.array, relevance_score: np.array,
                          item_list: np.array, fair_exposure, optimal_util_point):
-    utils, unfair = evaluation(exposure, relevance_score, item_list, fair_exposure)
-    utils_norm_term, unfair_norm_term = evaluation(optimal_util_point, relevance_score, item_list, fair_exposure)
+    utils, unfair = evaluation(exposure, relevance_score, item_list, fair_exposure, None)
+    utils_norm_term, unfair_norm_term = evaluation(optimal_util_point, relevance_score, item_list, fair_exposure, None)
     return utils / utils_norm_term, unfair / unfair_norm_term
