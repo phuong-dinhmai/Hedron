@@ -4,6 +4,7 @@ import json
 import matplotlib.pyplot as plt
 import os
 import sys
+import time
 
 sys.path.append(os.path.dirname(os.path.dirname(__file__)))
 
@@ -56,6 +57,8 @@ def experiment(query_file_path, item_group_file):
         "s_expo_2": [[] for i in range(20)],
         "s_expo_3": [[] for i in range(20)],
     }
+    norm_term = {}
+    running_time = {}
     cnt = 0
 
     for qid in queries.keys():
@@ -77,7 +80,7 @@ def experiment(query_file_path, item_group_file):
         gamma = 1 / np.log(np.arange(0, n_doc) + 2)
         group_size = group_matrix.sum(axis=0)
         item_group_masking = np.delete(group_matrix, group_size == 0, 1)
-        if (item_group_masking.shape[1] < 2): 
+        if (item_group_masking.shape[1] < 2 or item_group_masking.shape[1] == n_doc): 
             continue
         group_size = item_group_masking.sum(axis=0)
         group_fairness = group_size / np.sum(group_size) * np.sum(gamma)
@@ -86,7 +89,9 @@ def experiment(query_file_path, item_group_file):
         print(qid, " ", n_doc)
         
         # p_obj, p_points = projected_path(rel, item_group_masking, group_fairness, gamma)
+        q_start = time.time()
         qp_objs, qp_points = QP.experiment(rel, item_group_masking, gamma, group_fairness, results["alpha"])
+        q_end = time.time()
         
         if np.linalg.norm(qp_objs[0][0] - qp_objs[-1][0]) < 1e-4: 
             print("skip utils")
@@ -97,8 +102,11 @@ def experiment(query_file_path, item_group_file):
         # print(qp_objs)
         # raise Exception("test")
 
+        s_start = time.time()
         spoints, s_1_points, s_2_points, s_3_points = s_short_cut_accuracy(rel, item_group_masking, group_fairness, gamma, 3, 2)
+        s_end = time.time()
         optimal_util_point = s_1_points[-1]
+        norm_term[qid] = evaluation(optimal_util_point, rel, item_group_masking, group_fairness, None)
 
         s_1_objs = [evaluation(point, rel, item_group_masking, group_fairness, None) for point in s_1_points]
         # s_2_objs = [evaluation(point, rel, item_group_masking, group_fairness, None) for point in s_2_points]
@@ -109,6 +117,8 @@ def experiment(query_file_path, item_group_file):
         qp_objs, qp_points = qp_objs[:-1], qp_points[:-1]
         qp_objs.append(s_3_objs[-1])
         qp_points.append(None)
+
+        running_time[str(qid)] = [q_end-q_start, s_end-s_start]
 
         for i in range(0, len(results["alpha"])):
             alpha = results["alpha"][i]
@@ -123,8 +133,8 @@ def experiment(query_file_path, item_group_file):
 
             point, objs = sphere_get_pareto_point_for_scalarization(s_1_points, gamma, group_fairness, optimal, rel, item_group_masking, optimal_util_point)
             results["s_expo_1"][i].append(objs)
-            # point, objs = sphere_get_pareto_point_for_scalarization(s_2_points, gamma, group_fairness, optimal, rel, item_group_masking, optimal_util_point)
-            # results["s_expo_2"][i].append(objs)
+            point, objs = sphere_get_pareto_point_for_scalarization(s_2_points, gamma, group_fairness, optimal, rel, item_group_masking, optimal_util_point)
+            results["s_expo_2"][i].append(objs)
             point, objs = sphere_get_pareto_point_for_scalarization(s_3_points, gamma, group_fairness, optimal, rel, item_group_masking, optimal_util_point)
             results["s_expo_3"][i].append(objs)
 
@@ -133,9 +143,8 @@ def experiment(query_file_path, item_group_file):
 
     aggregation_result = {
         "qp": [],
-        # "p_expo": [],
         "s_expo_1": [],
-        # "s_expo_2": [],
+        "s_expo_2": [],
         "s_expo_3": [],
     }
 
@@ -146,13 +155,18 @@ def experiment(query_file_path, item_group_file):
 
 
     print(cnt)
+    summary = {
+        "accuracy": aggregation_result,
+        "norm": norm_term,
+        "running_time": running_time
+    }
     with open("results/TREC/aggregate.json", "w") as f_out:
-        json.dump(aggregation_result, f_out, cls=json_serialize)
+        json.dump(summary, f_out, cls=json_serialize)
 
     # plt.plot(aggregation_result["p_expo"][:, 1], aggregation_result["p_expo"][:, 0], "o-g",, label="P-Expo")
     plt.plot(aggregation_result["qp"][:, 1], aggregation_result["qp"][:, 0], "o-b", label="QP")
     plt.plot(aggregation_result["s_expo_1"][:, 1], aggregation_result["s_expo_1"][:, 0], "x--y", label="Sphere-Expo_1")
-    # plt.plot(aggregation_result["s_expo_2"][:, 1], aggregation_result["s_expo_2"][:, 0], "x--m", label="Sphere-Expo_5")
+    plt.plot(aggregation_result["s_expo_2"][:, 1], aggregation_result["s_expo_2"][:, 0], "x--m", label="Sphere-Expo_5")
     plt.plot(aggregation_result["s_expo_3"][:, 1], aggregation_result["s_expo_3"][:, 0], "x--r", label="Sphere-Expo_7")
     plt.ylabel("Normalized User utility")
     plt.xlabel("Normalized Unfairness")

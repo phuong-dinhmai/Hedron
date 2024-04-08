@@ -82,15 +82,14 @@ def experiment(relevance_score: np.ndarray, item_list: np.ndarray, gamma: np.nda
             status, result = solver.optimize()
 
             # print(status)
-            if status == cp.OPTIMAL:
+            if status == cp.OPTIMAL or status == cp.OPTIMAL_INACCURATE:
                 pareto_set.append(result)
                 objectives = evaluation(result, relevance_score, item_list, gamma, target_fairness)
                 pareto_front.append(objectives)
         except Exception as e:
             print("Error at alpha: ", alpha)
             print(e)
-            pareto_set.append(None)
-            pareto_front.append((None, None))
+            return None, None
         
     # print(pareto_front)
 

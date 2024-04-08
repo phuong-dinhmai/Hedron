@@ -46,21 +46,22 @@ def draw(curves, names):
 
 
 def single_test(n_doc, n_group):
-    rel, item_group_masking, group_fairness, gamma = load_data(n_doc, n_group, n_doc)
+    rel, item_group_masking, group_fairness, gamma = load_data(n_doc, n_group, 10)
+    print(item_group_masking)
 
     p_obj, p_points = projected_path(rel, item_group_masking, group_fairness, gamma)
     # s_0_obj, s_0_points = sphere_path(rel, item_group_masking, group_fairness, gamma, 0, 20)
     # s_1_obj, s_1_points = sphere_path(rel, item_group_masking, group_fairness, gamma, 1, 10)
-    s_2_obj, s_2_points = sphere_path(rel, item_group_masking, group_fairness, gamma, 4, 5)
-    # s_3_obj, s_3_points = sphere_path(rel, item_group_masking, group_fairness, gamma, 3, 2)
+    # s_2_obj, s_2_points = sphere_path(rel, item_group_masking, group_fairness, gamma, 2, 5)
+    s_3_obj, s_3_points = sphere_path(rel, item_group_masking, group_fairness, gamma, 3, 2)
 
     # baseline
     qp_objs, qp_points = QP.experiment(rel, item_group_masking, gamma, group_fairness, np.arange(1, 21) / 20)
     # 
-    draw([qp_objs, p_obj, s_2_obj], ["baseline", "P-Expo", "Sphere-Expo_2"])
+    draw([qp_objs, p_obj, s_3_obj], ["baseline", "P-Expo", "Sphere-Expo_7"])
 
-    # draw([qp_objs, p_obj, s_0_obj, s_1_obj, s_2_obj, s_3_obj], 
-    #      ["QP", "P-Expo", "Sphere-Expo_0", "Sphere-Expo_1", "Sphere-Expo_3", "Sphere-Expo_7"])
+    # draw([qp_objs, s_0_obj, s_1_obj, s_2_obj, s_3_obj], 
+    #      ["QP", "Sphere-Expo_0", "Sphere-Expo_1", "Sphere-Expo_3", "Sphere-Expo_7"])
 
 
 def massive_running_time_test(n_item_group_range, repeated_time, file_name):
@@ -122,22 +123,22 @@ def aggregation_test(n_doc_range):
     results = {
         "alpha": np.arange(1, 21) / 20,
         "qp": [[] for i in range(20)],
-        # "p_expo": [[] for i in range(20)],
+        "p_expo": [[] for i in range(20)],
         "s_expo_1": [[] for i in range(20)],
-        # "s_expo_2": [[] for i in range(20)],
+        "s_expo_2": [[] for i in range(20)],
         "s_expo_3": [[] for i in range(20)]
     }
     num_doc_list = set(n_doc_range)
     running_time = {
         "qp": {i:[] for i in num_doc_list},
-        # "p_expo": {i:[] for i in num_doc_list},
+        "p_expo": {i:[] for i in num_doc_list},
         "s_expo_1": {i:[] for i in num_doc_list},
-        # "s_expo_2": {i:[] for i in num_doc_list},
+        "s_expo_2": {i:[] for i in num_doc_list},
         "s_expo_3": {i:[] for i in num_doc_list}
     }
     for n_doc in n_doc_range:
-        print(n_doc)
-        n_group = np.random.randint(3, n_doc-2)
+        n_group = np.random.randint(3, n_doc/2)
+        print(n_doc, n_group)
         # n_group = 3
         rel, item_group_masking, group_fairness, gamma = load_data(n_doc, n_group)
 
@@ -146,20 +147,20 @@ def aggregation_test(n_doc_range):
         end = time.time()
         running_time["qp"][n_doc].append(end - start)
 
-        # start = time.time()
-        # p_obj, p_points = projected_path(rel, item_group_masking, group_fairness, gamma)
-        # end = time.time()
-        # running_time["p_expo"][n_doc].append(end - start)
+        start = time.time()
+        p_obj, p_points = projected_path(rel, item_group_masking, group_fairness, gamma)
+        end = time.time()
+        running_time["p_expo"][n_doc].append(end - start)
 
         start = time.time()
         s_1_obj, s_1_points = sphere_path(rel, item_group_masking, group_fairness, gamma, 1, 3)
         end = time.time()
         running_time["s_expo_1"][n_doc].append(end - start)
 
-        # start = time.time()
-        # s_2_obj, s_2_points = sphere_path(rel, item_group_masking, group_fairness, gamma, 2, 3)
-        # end = time.time()
-        # running_time["s_expo_2"][n_doc].append(end - start)
+        start = time.time()
+        s_2_obj, s_2_points = sphere_path(rel, item_group_masking, group_fairness, gamma, 2, 3)
+        end = time.time()
+        running_time["s_expo_2"][n_doc].append(end - start)
 
         start = time.time()
         s_3_obj, s_3_points = sphere_path(rel, item_group_masking, group_fairness, gamma, 3, 3)
@@ -168,36 +169,37 @@ def aggregation_test(n_doc_range):
 
 
         optimal_util_point = s_1_points[-1]
-        # draw([qp_objs, p_obj, s_3_obj], ["baseline", "P-Expo", "Sphere-Expo_2"])
+        # draw([qp_objs, p_obj], ["baseline", "P-Expo"])
 
         for i in range(0, len(results["alpha"])):
             alpha = results["alpha"][i]
-            # point, objs = get_pareto_point_for_scalarization(p_points, group_fairness, alpha, rel, item_group_masking, optimal_util_point)
-            # results["p_expo"][i].append(objs)
             optimal = qp_points[i] @ gamma
             results["qp"][i].append(normalize_evaluation(optimal, rel, item_group_masking, group_fairness, optimal_util_point))
 
+            point, objs = sphere_get_pareto_point_for_scalarization(p_points, gamma, group_fairness, optimal, rel, item_group_masking, optimal_util_point)
+            results["p_expo"][i].append(objs)
+
             point, objs = sphere_get_pareto_point_for_scalarization(s_1_points, gamma, group_fairness, optimal, rel, item_group_masking, optimal_util_point)
             results["s_expo_1"][i].append(objs)
-            # point, objs = sphere_get_pareto_point_for_scalarization(s_2_points, gamma, group_fairness, optimal, rel, item_group_masking, optimal_util_point)
-            # results["s_expo_2"][i].append(objs)
+            point, objs = sphere_get_pareto_point_for_scalarization(s_2_points, gamma, group_fairness, optimal, rel, item_group_masking, optimal_util_point)
+            results["s_expo_2"][i].append(objs)
             point, objs = sphere_get_pareto_point_for_scalarization(s_3_points, gamma, group_fairness, optimal, rel, item_group_masking, optimal_util_point)
             results["s_expo_3"][i].append(objs)
             # raise Exception("test")
 
     aggregation_result = {
         "qp": [],
-        # "p_expo": [],
+        "p_expo": [],
         "s_expo_1": [],
-        # "s_expo_2": [],
+        "s_expo_2": [],
         "s_expo_3": [],
     }
 
     aggregation_running_time = {
         "qp": [],
-        # "p_expo": [],
+        "p_expo": [],
         "s_expo_1": [],
-        # "s_expo_2": [],
+        "s_expo_2": [],
         "s_expo_3": [],
     }
 
@@ -221,27 +223,27 @@ def aggregation_test(n_doc_range):
         "accuracy": aggregation_result,
         "running_time": aggregation_running_time
     }
-    with open('results/synthetic/large.json', "w") as log_file:
+    with open('results/synthetic/small.json', "w") as log_file:
         json.dump(summary, log_file, cls=json_serialize)
 
 
     fig, ax = plt.subplots(nrows=1, ncols=2)
 
     ax[0].plot(aggregation_result["qp"][:, 1], aggregation_result["qp"][:, 0], "o-b", label="QP")
-    # ax[0].plot(aggregation_result["p_expo"][:, 1], aggregation_result["p_expo"][:, 0], "o-g", label="P-Expo")
-    ax[0].plot(aggregation_result["s_expo_1"][:, 1], aggregation_result["s_expo_1"][:, 0], "x--y", label="Sphere-Expo_1")
+    ax[0].plot(aggregation_result["p_expo"][:, 1], aggregation_result["p_expo"][:, 0], "o-g", label="P-Expo")
+    # ax[0].plot(aggregation_result["s_expo_1"][:, 1], aggregation_result["s_expo_1"][:, 0], "x--y", label="Sphere-Expo_1")
     # ax[0].plot(aggregation_result["s_expo_2"][:, 1], aggregation_result["s_expo_2"][:, 0], "x--m", label="Sphere-Expo_5")
-    ax[0].plot(aggregation_result["s_expo_3"][:, 1], aggregation_result["s_expo_3"][:, 0], "x--r", label="Sphere-Expo_7")
+    # ax[0].plot(aggregation_result["s_expo_3"][:, 1], aggregation_result["s_expo_3"][:, 0], "x--r", label="Sphere-Expo_7")
     ax[0].set_ylabel("Normalized User utility")
     ax[0].set_xlabel("Normalized Unfairness (nDCG)")
     ax[0].legend(loc='lower right')
     ax[0].set_title('Aggregated Pareto fronts')
     
     ax[1].plot(num_doc_list, aggregation_running_time["qp"], "o-b", label="QP")
-    # ax[1].plot(num_doc_list, aggregation_running_time["p_expo"], "o-g", label="P-Expo")
-    ax[1].plot(num_doc_list, aggregation_running_time["s_expo_1"], "x--y", label="Sphere-Expo_1")
+    ax[1].plot(num_doc_list, aggregation_running_time["p_expo"], "o-g", label="P-Expo")
+    # ax[1].plot(num_doc_list, aggregation_running_time["s_expo_1"], "x--y", label="Sphere-Expo_1")
     # ax[1].plot(num_doc_list, aggregation_running_time["s_expo_2"], "x--m", label="Sphere-Expo_5")
-    ax[1].plot(num_doc_list, aggregation_running_time["s_expo_3"], "x--r", label="Sphere-Expo_7")
+    # ax[1].plot(num_doc_list, aggregation_running_time["s_expo_3"], "x--r", label="Sphere-Expo_7")
     ax[1].set_ylabel("Avg running time (s)")
     ax[1].set_xlabel("Number of items")
     ax[1].legend(loc='lower right')
@@ -251,16 +253,15 @@ def aggregation_test(n_doc_range):
     plt.show()
 
 if __name__ == "__main__":
-    # n_doc = 14
-    # n_group = 3
-    # # n_group = np.random.randint(3, n_doc-2)
-    # # print(n_group)
-    # single_test(n_doc, n_group)
-    # n_docs = np.random.randint(3, 8, 20)
-    # n_docs = np.power(2, n_docs)
-    n_docs = 5 * np.arange(2, 21)
-    n_docs = np.repeat(n_docs, 3)
-    aggregation_test(n_docs)
-    # for n_doc in np.arange(8, 10):
-    #     n_group = np.random.randint(3, n_doc-2)
-    #     single_test(n_doc, n_group)
+    n_doc = 7
+    n_group = 35
+    # n_group = np.random.randint(3, n_doc-2)
+    # print(n_group)
+    single_test(n_doc, n_group)
+    # n_docs = np.arange(8, 21)
+    # # n_docs = 5 * np.arange(2, 21)
+    # n_docs = np.repeat(n_docs, 3)
+    # aggregation_test(n_docs)
+    # # for n_doc in np.arange(8, 10):
+    # #     n_group = np.random.randint(3, n_doc-2)
+    # #     single_test(n_doc, n_group)

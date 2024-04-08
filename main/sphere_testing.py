@@ -3,7 +3,7 @@ import pandas as pd
 
 from scipy.linalg import null_space, norm
 
-from .helpers import project_point_on_plane, invert_permutation
+from .helpers import project_point_on_plane, invert_permutation, project_on_vector_space
 from .helpers import Objective
 from .sphereCoordinator import BasisTransformer, SphereCoordinator
 from .expohedron import Expohedron
@@ -37,11 +37,23 @@ def sphere_path(relevance_score: np.ndarray, item_group_masking: np.ndarray, gro
     basis_transform = BasisTransformer(center_point, null_space(expohedron_complement), compress=radius)
     sphere_coor = SphereCoordinator(center_point, radius, basis_transform, n_sample)
 
-    t_starting_point, t_end_point = basis_transform.transform([sphere_coor.line_intersect_sphere(pareto_point), end_point])
+    if b.shape[0] == n_doc: # special case when n_group = n_doc
+        face_orth = np.ones([1, n_doc])
+        check_dir = project_on_vector_space(relevance_score, face_orth)
 
-    pareto_set = sphere_coor.geodesic_binary_approximate(n_divided, t_starting_point, t_end_point, objs, hedron)
-    pareto_set = [pareto_point,] + pareto_set + [end_point,]
-    objectives = [objs.objectives(point) for point in pareto_set]
+        # change the starting points to the intersection which lays on the facet
+        intersect_point = hedron.find_face_intersection_bisection(pareto_point, check_dir) 
+        t_starting_point, t_end_point = basis_transform.transform([sphere_coor.line_intersect_sphere(intersect_point), end_point])
+
+        pareto_set = sphere_coor.geodesic_binary_approximate(n_divided, t_starting_point, t_end_point, objs, hedron)
+        pareto_set = [pareto_point, intersect_point] + pareto_set + [end_point,]
+        objectives = [objs.objectives(point) for point in pareto_set]
+    else:
+        t_starting_point, t_end_point = basis_transform.transform([sphere_coor.line_intersect_sphere(pareto_point), end_point])
+
+        pareto_set = sphere_coor.geodesic_binary_approximate(n_divided, t_starting_point, t_end_point, objs, hedron)
+        pareto_set = [pareto_point,] + pareto_set + [end_point,]
+        objectives = [objs.objectives(point) for point in pareto_set]
 
     # print(objectives)
     return objectives, pareto_set

@@ -222,14 +222,14 @@ class Objective:
         # print("status:", prob.status)
         if prob.status == cp.OPTIMAL:
             return cp_vars.value
-        print("status:", prob.status)
+        # print("status:", prob.status)
         raise Exception("Error ")
     
     def custom_optimal(self, a, b):
         # print(cp.installed_solvers())
         n_doc, _ = self.group_masking.shape
         cp_vars = cp.Variable(n_doc)
-        constrs = [a.T @ cp_vars == b, cp_vars <= self.pbm[0]]
+        constrs = [a.T @ cp_vars == b, cp_vars >= 0]
         obj_func = cp.Maximize(self.relevance_score @ cp_vars)
         prob = cp.Problem(obj_func, constrs)
         prob.solve(verbose=False, solver=cp.SCIPY, scipy_options={'method':'highs-ds', 'maxiter':10000})  # Returns the optimal value.

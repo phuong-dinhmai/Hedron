@@ -14,7 +14,7 @@ sys.path.append(os.path.dirname(os.path.dirname(__file__)))
 parser = argparse.ArgumentParser()
 parser.add_argument("-g", "--gamma", type=float, help="Continuation probability", default=0.9)
 parser.add_argument("-l", "--lambd", type=float, help="Weight of fairness wrt utility", default=0.2)
-parser.add_argument("-t", "--beta", type=float, help="Weight of deserved exposure wrt rel in init sorting", default=1.0)
+parser.add_argument("-t", "--beta", type=float, help="Weight of deserved exposure wrt rel in init sorting", default=5.0)
 parser.add_argument("-e", "--eps", type=float, help="Probability of satisfaction given a relevant document", default=1.0)
 parser.add_argument("-b", "--bin_size", type=int, help="Size of the bins of documents", default=3)
 parser.add_argument("-n", "--max_n_bins", type=int, help="Maximum number of bins", default=1)
@@ -36,7 +36,7 @@ def exposure(ranking, n_groups, doc_groups, rel):
         doc = ranking[i]
         if len(doc_groups[doc]) > 0:
             for group in doc_groups[doc]:
-                exps[group] += 1/np.log(i+2)
+                exps[group] += 1/(i+1)
         #         exps[group] += (GAMMA ** i) * prod
         # prod *= 1 - probability(doc, rel)
     return exps
@@ -57,7 +57,7 @@ def utility(ranking, rel):
     prod = 1
     for i in range(len(ranking)):
         doc = ranking[i]
-        sum += 1/np.log(i+2) * probability(doc, rel)
+        sum += 1/(i+1) * probability(doc, rel)
     # for i in range(len(ranking)):
     #     doc = ranking[i]
     #     sum += (GAMMA ** i) * prod * probability(doc, rel)
@@ -93,9 +93,9 @@ train_df = df_transform(train)
 train_df = train_df.astype(float)
 train_df[1] = train_df[1].astype(int)
 
-x = train_df[1].value_counts()
-bins = [i for i in range(0, 260, 10)]
-labels = [i for i in range(0, 25)]
+x = train_df[1].unique()
+bins = [i for i in range(0, 270, 10)]
+labels = [i for i in range(0, 26)]
 train_df['binned'] = pd.cut(train_df[133], bins=bins, labels=labels)
 # Find a (potentially sub-)optimal ranking for every query
 exposure_history = {} # Exposure history per group for each query, used for amortization in repeated queries
@@ -109,15 +109,16 @@ unfairness = {}
 init_time = time()
 cnt = 0
 
-x = x.loc[[175, 340, 445]]
+# x = x[:1]
 
-for query_id in x.index:
-    if x[query_id] >= 100 or x[query_id] <= 5:
-        continue
+for query_id in x:
+    query_id = int(query_id)
     sequence_id = cnt
 
     # Fetch relevant information in the query
     query_docs = train_df.loc[train_df[1] == query_id] # Documents associated with the query
+    if len(query_docs) >= 100 or len(query_docs) < 5:
+        continue
     doc_groups = []
     query_group_dict = {} # Mapping between global group ids and query group ids
     rel_probas = []
@@ -127,7 +128,7 @@ for query_id in x.index:
 
     for query_doc_id in query_docs.index:
         query_doc = query_docs.loc[query_doc_id]
-        filtered_query_docs.append(query_doc)
+        filtered_query_docs.append(query_doc_id)
         rel_probas.append(query_doc[0] / 5) # Use the groundtruth relevance
         group = int(query_doc["binned"])
         if group not in query_group_dict:
@@ -137,16 +138,16 @@ for query_id in x.index:
         doc_groups.append([query_group_dict[group]])
         cnt_group[query_group_dict[group]] += 1
 
-    if n_groups < 2:
+    if n_groups < 2 or n_groups == len(query_doc):
         continue
     cnt += 1
-    for search_id in range(1000):
+    for search_id in range(1, 101):
         if int(search_id) % 100 == 0:
             print("Processing sequence %s -- search %s -- time %.3fs" % (sequence_id, search_id, time() - init_time),
                 flush=True)
         
         n_query_docs = len(filtered_query_docs)
-        target_exposure = cnt_group / np.sum(cnt_group) * np.sum(1 / np.log(np.arange(0, n_query_docs) + 2))
+        target_exposure = cnt_group / np.sum(cnt_group) * np.sum(1 / np.arange(1, n_query_docs+1))
 
         # Find a (potentially sub-)optimal ranking for this query
         ## Fetch the history of exposure and relevance if the query has already been processed
@@ -186,16 +187,12 @@ for query_id in x.index:
             for id in range(n_query_docs):
                 doc_discrepancy = 0.0
                 for g in doc_groups[id]:
-                    # print(g)
-                    # print(target_exposure[g])
-                    # print(cumul_exposures[g])
                     # past_exposure = cumul_exposures[g] / exposure_norm
                     # past_relevance = cumul_relevances[g] / relevance_norm
                     # doc_discrepancy += past_exposure - past_relevance # Past over-exposure
                     past_exposure = cumul_exposures[g] / (query_count + 1)
-                    doc_discrepancy += np.square(past_exposure - target_exposure[g])
-                doc_discrepancy
-                de_sort_scores.append(np.sqrt(doc_discrepancy))
+                    doc_discrepancy += past_exposure - target_exposure[g]
+                de_sort_scores.append(doc_discrepancy)
         else:
             de_sort_scores = [0.0] * n_query_docs # If no docs are relevant, consider that all docs get deserved exposure
         de_sort_scores = np.asarray(de_sort_scores)
@@ -248,9 +245,13 @@ for query_id in x.index:
                     discrepancy += np.square(amortized_exposure - target_exposure[g])
                 discrepancy = np.sqrt(discrepancy)
                 # print(util, " ", np.array(group_exposures) / (query_count + 1), " ", target_exposure)
+                # print(discrepancy)
+                # print(util)
+                # print(np.array(group_exposures).sum() / (query_count + 1))
+                # print(target_exposure.sum())
 
             # Compute the overall score for the current ranking on the current partition
-            eval_score = util - LAMBDA * discrepancy
+            eval_score = LAMBDA * util + (1-LAMBDA) * discrepancy
 
             if eval_score > optimal_ranking_score:
                 optimal_ranking_id = r
@@ -259,7 +260,9 @@ for query_id in x.index:
                 optimal_ranking_group_relevances = group_relevances
                 optimal_ranking_utility = util
                 optimal_ranking_discrepancy = discrepancy
-
+        if optimal_ranking_discrepancy > 10:
+            print(query_id)
+            raise Exception("test")
         sequence_query_eval_scores[sequence_id][query_id] = optimal_ranking_score
         optimal_ranking = [filtered_query_docs[d] for d in rankings[optimal_ranking_id]]
         search_rankings.append({'q_num': str(sequence_id) + "." + str(search_id), 'qid': query_id, 'ranking': optimal_ranking})
@@ -270,13 +273,14 @@ for query_id in x.index:
         utility_history[sequence_id][query_id] = optimal_ranking_utility
         discrepancy_history[sequence_id][query_id] = optimal_ranking_discrepancy
         sequence_query_counts[sequence_id][query_id] = query_count + 1
-        unfairness[sequence_id][query_id] = np.linalg.norm(np.array(optimal_ranking_group_exposures) / (query_count+1) - target_exposure)
+        x = np.array(optimal_ranking_group_exposures) / (query_count+1) - target_exposure
+        unfairness[sequence_id][query_id] = np.sum(x ** 2)
 
 elapsed_time = time() - init_time
 print("Elapsed time (s):", elapsed_time, flush=True)
 mean_utility = [np.mean(list(query_utilities.values())) for query_utilities in utility_history.values()]
 
-output_path = f"results/MSLR/"
+output_path = f"results/MSLR/133/"
 
 if not os.path.exists(output_path):
     os.makedirs(output_path)

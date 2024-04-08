@@ -12,9 +12,9 @@ sys.path.append(os.path.dirname(os.path.dirname(__file__)))
 
 parser = argparse.ArgumentParser()
 parser.add_argument("-g", "--gamma", type=float, help="Continuation probability", default=0.9)
-parser.add_argument("-l", "--lambd", type=float, help="Weight of fairness wrt utility", default=0.2)
+parser.add_argument("-l", "--lambd", type=float, help="Weight of fairness wrt utility", default=1.0)
 parser.add_argument("-t", "--beta", type=float, help="Weight of deserved exposure wrt rel in init sorting", default=1.0)
-parser.add_argument("-e", "--eps", type=float, help="Probability of satisfaction given a relevant document", default=1.0)
+parser.add_argument("-e", "--eps", type=float, help="Probability of satisfaction given a relevant document", default=0.5)
 parser.add_argument("-b", "--bin_size", type=int, help="Size of the bins of documents", default=3)
 parser.add_argument("-n", "--max_n_bins", type=int, help="Maximum number of bins", default=1)
 parser.add_argument("-f", "--grouping_file", type=str, help="Grouping file for fairness definition")
@@ -27,7 +27,6 @@ BETA = args.beta # Tradeoff hyperparameter balancing relevance and deserved expo
 BIN_SIZE = args.bin_size # Size of the bins of documents to split the rankings
 MAX_N_BINS = args.max_n_bins # Maximum number of bins to permute over in the rankings (remaining bins are kept fixed)
 
-
 def exposure(ranking, n_groups, doc_groups, rel):
     exps = [0.0] * n_groups
     prod = 1
@@ -35,11 +34,9 @@ def exposure(ranking, n_groups, doc_groups, rel):
         doc = ranking[i]
         if len(doc_groups[doc]) > 0:
             for group in doc_groups[doc]:
-                exps[group] += 1/np.log(i+2)
-        #         exps[group] += (GAMMA ** i) * prod
-        # prod *= 1 - probability(doc, rel)
+                exps[group] += (GAMMA ** i) * prod
+        prod *= 1 - probability(doc, rel)
     return exps
-
 
 def relevance(ranking, n_groups, doc_groups, rel):
     rels = [0.0] * n_groups
@@ -50,19 +47,14 @@ def relevance(ranking, n_groups, doc_groups, rel):
                 rels[group] += probability(doc, rel)
     return rels
 
-
 def utility(ranking, rel):
     sum = 0
     prod = 1
     for i in range(len(ranking)):
         doc = ranking[i]
-        sum += 1/np.log(i+2) * probability(doc, rel)
-    # for i in range(len(ranking)):
-    #     doc = ranking[i]
-    #     sum += (GAMMA ** i) * prod * probability(doc, rel)
-    #     prod *= 1 - probability(doc, rel)
+        sum += (GAMMA ** i) * prod * probability(doc, rel)
+        prod *= 1 - probability(doc, rel)
     return sum
-
 
 def probability(doc, rel):
     return EPS * rel[doc]
@@ -80,15 +72,16 @@ sequence_file = open(sequence_file_path, "r", encoding="utf8")
 sequences = list(csv.reader(sequence_file, delimiter=',')) # The sequences of searches (w/ potentially repeated queries)
 
 # Load the group partition according to which fairness is defined
-# partition_file_path = dir_path + "groupings-source/" + args.grouping_file
 args.grouping_file = "year_group"
 partition_file_path = f"data/TREC/{args.grouping_file}.csv"
 partition_file = pd.read_csv(partition_file_path, index_col=0)
 group_name = partition_file.columns.to_list()
 global_doc_groups = {}
+cnt = 0
 for id in partition_file.index:
     group = partition_file.loc[id]
-    global_doc_groups[id] =  [group_name.index(group[group == True].index)]
+    global_doc_groups[id] =  [cnt]
+    cnt += 1
 
 # Find a (potentially sub-)optimal ranking for every query
 exposure_history = {} # Exposure history per group for each query, used for amortization in repeated queries
@@ -98,7 +91,6 @@ discrepancy_history = {} # Discrepancy history for each query
 sequence_query_counts = {} # Number of time per sequence each query occurs in different searches
 sequence_query_eval_scores = {} # Evaluation scores for each unique query, with amortization for repeated queries
 search_rankings = [] # The rankings obtained for each search
-unfairness = {}
 init_time = time()
 for search in sequences:
     query_id = int(search[1])
@@ -114,7 +106,6 @@ for search in sequences:
     query_group_dict = {} # Mapping between global group ids and query group ids
     rel_probas = []
     filtered_query_docs = []
-    cnt_group = []
     n_groups = 0
     for (i, query_doc) in enumerate(query_docs):
         query_doc_id = query_doc['doc_id']
@@ -128,13 +119,10 @@ for search in sequences:
                 if group not in query_group_dict:
                     query_group_dict[group] = n_groups
                     n_groups = n_groups + 1
-                    cnt_group.append(0)
                 current_doc_groups.append(query_group_dict[group])
-                cnt_group[query_group_dict[group]] += 1
         #doc_groups.append(set(current_doc_groups)) # Repetitions of the same group in doc contribute only once
         doc_groups.append(current_doc_groups) # Repetitions of the same group in doc all contribute
     n_query_docs = len(filtered_query_docs)
-    target_exposure = cnt_group / np.sum(cnt_group) * np.sum(1 / np.log(np.arange(0, n_query_docs) + 2))
 
     # Find a (potentially sub-)optimal ranking for this query
     ## Fetch the history of exposure and relevance if the query has already been processed
@@ -156,7 +144,6 @@ for search in sequences:
         discrepancy_history[sequence_id] = {}
         sequence_query_counts[sequence_id] = {}
         sequence_query_eval_scores[sequence_id] = {}
-        unfairness[sequence_id] = {}
         cumul_exposures = [0.0] * n_groups
         cumul_relevances = [0.0] * n_groups
         cumul_utilities = 0.0
@@ -174,16 +161,10 @@ for search in sequences:
         for id in range(n_query_docs):
             doc_discrepancy = 0.0
             for g in doc_groups[id]:
-                # print(g)
-                # print(target_exposure[g])
-                # print(cumul_exposures[g])
-                # past_exposure = cumul_exposures[g] / exposure_norm
-                # past_relevance = cumul_relevances[g] / relevance_norm
-                # doc_discrepancy += past_exposure - past_relevance # Past over-exposure
-                past_exposure = cumul_exposures[g] / (query_count + 1)
-                doc_discrepancy += np.square(past_exposure - target_exposure[g])
-            doc_discrepancy
-            de_sort_scores.append(np.sqrt(doc_discrepancy))
+                past_exposure = cumul_exposures[g] / exposure_norm
+                past_relevance = cumul_relevances[g] / relevance_norm
+                doc_discrepancy += past_exposure - past_relevance # Past over-exposure
+            de_sort_scores.append(doc_discrepancy)
     else:
         de_sort_scores = [0.0] * n_query_docs # If no docs are relevant, consider that all docs get deserved exposure
     de_sort_scores = np.asarray(de_sort_scores)
@@ -230,13 +211,10 @@ for search in sequences:
         discrepancy = 0.0
         if exposure_norm > 0 and relevance_norm > 0:
             for g in range(n_groups):
-                # amortized_exposure = group_exposures[g] / exposure_norm
-                # amortized_relevance = group_relevances[g] / relevance_norm
-                # discrepancy += np.square(amortized_exposure - amortized_relevance)
-                amortized_exposure = group_exposures[g] / (query_count + 1)
-                discrepancy += np.square(amortized_exposure - target_exposure[g])
+                amortized_exposure = group_exposures[g] / exposure_norm
+                amortized_relevance = group_relevances[g] / relevance_norm
+                discrepancy += np.square(amortized_exposure - amortized_relevance)
             discrepancy = np.sqrt(discrepancy)
-            # print(util, " ", np.array(group_exposures) / (query_count + 1), " ", target_exposure)
 
         # Compute the overall score for the current ranking on the current partition
         eval_score = util - LAMBDA * discrepancy
@@ -259,38 +237,44 @@ for search in sequences:
     utility_history[sequence_id][query_id] = optimal_ranking_utility
     discrepancy_history[sequence_id][query_id] = optimal_ranking_discrepancy
     sequence_query_counts[sequence_id][query_id] = query_count + 1
-    unfairness[sequence_id][query_id] = np.linalg.norm(np.array(optimal_ranking_group_exposures) / (query_count+1) - target_exposure)
 
 elapsed_time = time() - init_time
 print("Elapsed time (s):", elapsed_time, flush=True)
-mean_utility = [np.mean(list(query_utilities.values())) for query_utilities in utility_history.values()]
+mean_utility = np.mean([np.mean(list(query_utilities.values()))
+                        for query_utilities in utility_history.values()])
+mean_discrepancy = np.mean([np.mean(list(query_discrepancies.values()))
+                            for query_discrepancies in discrepancy_history.values()])
+mean_eval_score = np.mean([np.mean(list(query_eval_scores.values()))
+                           for query_eval_scores in sequence_query_eval_scores.values()])
 
 query_file.close()
 sequence_file.close()
 
-output_path = f"results/TREC/{args.grouping_file}/"
+output_path = dir_path + "results/" + args.grouping_file + ".csv/"
 
 if not os.path.exists(output_path):
     os.makedirs(output_path)
 
-# # Save the obtained rankings
-# ranking_file_path = output_path + "evaluation-rankings-single-g" + str(GAMMA) + "-l" + str(LAMBDA) + "-b" + \
-#                     str(BIN_SIZE) + "-n" + str(MAX_N_BINS) + "-t" + str(BETA) + "-e" + str(EPS) + ".json"
-#
-# with open(ranking_file_path, "w", encoding="utf8") as ranking_file:
-#     for search_ranking in search_rankings:
-#         ranking_file.write(json.dumps(search_ranking) + "\n")
+# Save the obtained rankings
+ranking_file_path = output_path + "evaluation-rankings-single-g" + str(GAMMA) + "-l" + str(LAMBDA) + "-b" + \
+                    str(BIN_SIZE) + "-n" + str(MAX_N_BINS) + "-t" + str(BETA) + "-e" + str(EPS) + ".json"
+
+with open(ranking_file_path, "w", encoding="utf8") as ranking_file:
+    for search_ranking in search_rankings:
+        ranking_file.write(json.dumps(search_ranking) + "\n")
 
 # Save the log
 log_file_path = output_path + "evaluation-log-single-g" + str(GAMMA) + "-l" + str(LAMBDA) + "-b" + \
-                str(BIN_SIZE) + "-n" + str(MAX_N_BINS) + "-t" + str(BETA) + "-e" + str(EPS) + ".json"
-
-results = {
-    "utility": utility_history,
-    "unfairness": unfairness,
-    "exposure_history": exposure_history,
-    # "sequence_cnt": sequence_query_counts
-}
+                str(BIN_SIZE) + "-n" + str(MAX_N_BINS) + "-t" + str(BETA) + "-e" + str(EPS) + ".txt"
 
 with open(log_file_path, "w", encoding="utf8") as log_file:
-    json.dump(results, log_file)
+    log_file.write("Mean utility: " + str(mean_utility) + "\n")
+    log_file.write("Mean discrepancy: " + str(mean_discrepancy) + "\n")
+    log_file.write("Mean eval score: " + str(mean_eval_score) + "\n")
+    log_file.write("Elapsed time (s): " + str(elapsed_time) + "\n")
+    log_file.write("Sequence-specific utility per query: " + "\n")
+    log_file.write(str(utility_history) + "\n")
+    log_file.write("Sequence-specific discrepancy per query: " + "\n")
+    log_file.write(str(discrepancy_history) + "\n")
+    log_file.write("Sequence-specific eval score per query: " + "\n")
+    log_file.write(str(sequence_query_eval_scores) + "\n")
