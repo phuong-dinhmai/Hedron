@@ -13,7 +13,7 @@ import os
 sys.path.append(os.path.dirname(os.path.dirname(__file__)))
 
 from data.synthetic.load_data import load_data
-from main.projected_testing import projected_path
+from main.projected_testing_test import projected_path
 from main.sphere_testing import sphere_path
 from evaluation.exposure_to_bistochastic import get_pareto_point_for_scalarization
 from evaluation.exposure_evaluation import evaluation, normalize_evaluation

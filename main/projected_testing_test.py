@@ -1,27 +1,12 @@
 import numpy as np
 import pandas as pd
 from itertools import combinations
-import os
-import sys
-import time
 
 from scipy.linalg import null_space, norm, orth
-import matplotlib.pyplot as plt
-
-SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
-sys.path.append(os.path.dirname(SCRIPT_DIR))
-
-from baseline import QP
-
-from data.synthetic.load_data import load_data
 
 from main.helpers import project_on_vector_space, invert_permutation, intersect_vector_space
-from main.helpers import Objective, project_vector_on_subspace, project_point_on_plane
+from main.helpers import Objective, project_vector_on_subspace
 from main.expohedron import find_face_subspace_without_parent_2, update_face_by_point, Expohedron
-
-
-def trans(A, B):
-    return np.linalg.inv(B).dot(A)
 
 
 def projected_path(relevance_score: np.ndarray, item_group_masking: np.ndarray, group_fairness: np.ndarray, gamma: np.ndarray):
@@ -66,7 +51,6 @@ def projected_path(relevance_score: np.ndarray, item_group_masking: np.ndarray, 
     pareto_set.append(pareto_point)
     objectives.append(objs.objectives(pareto_point))
     k = n_doc - n_group
-    fair_norm = null_space(item_group_masking.T)
     
     while True:
         if not hedron.contains(pareto_point):
@@ -82,58 +66,33 @@ def projected_path(relevance_score: np.ndarray, item_group_masking: np.ndarray, 
                 _face_orth = face_orth[:, include]
             else:
                 _face_orth = face_orth
-            x = np.concatenate([_face_orth, item_group_masking], axis=1)
-            r = np.linalg.matrix_rank(x)
-
-            x = orth(x)
-            b = np.concatenate([x[:, :k].T @ pareto_point, x[:, k:].T @ pareto_set[0]])
-            delta = project_vector_on_subspace(relevance_score, x)
-            center = project_point_on_plane(pareto_point, x, b)
-            check_dir = pareto_point - (center - delta)
-                
-            check_dir[np.abs(check_dir) < 1e-12] = 0
-            # if np.linalg.norm(check_dir) < 1e-12:
-            #     continue
-            # check_dir = check_dir / np.linalg.norm(check_dir)
-            check_dir = project_on_vector_space(check_dir, _face_orth.T)
+            x = _face_orth.sum(axis=0) - np.ones(_face_orth.shape[1])
+            _b = np.concatenate([group_fairness, sum_gamma[x.astype(int)]], axis=0)
+            _A = np.concatenate([item_group_masking, _face_orth], axis=1)
             
-            # if (r != n_doc):
-            #     # s = intersect_vector_space(null_space(_face_orth.T), null_space(item_group_masking.T))
-            #     # check_dir = project_on_vector_space(relevance_score, s.T)
-            #     # check_dir = project_vector_on_subspace(relevance_score, _face_orth)
-            #     # try:
-            #     #     status, _c = objs.custom_optimal(_A, _b)
-            #     # except Exception as error:
-            #     #     print(error)
-            #     #     _c = None
-            #     # print(status)
-            #     # if status == "infeasible":
-            #     #     check_dir = project_on_vector_space(relevance_score, _face_orth.T)
-            #     # elif status == "optimal" :
-            #     #     check_dir = -_c + pareto_point
-            #     # else:
-            #     #     check_dir = project_on_vector_space(relevance_score, _face_orth.T)
-            #     x = orth(x)
-            #     b = np.concatenate([x[:, :k].T @ pareto_point, x[:, k:].T @ pareto_set[0]])
-            #     delta = project_vector_on_subspace(relevance_score, x)
-            #     center = project_point_on_plane(pareto_point, x, b)
-            #     check_dir = pareto_point - (center - delta)
-                    
-            #     check_dir[np.abs(check_dir) < 1e-12] = 0
-            #     # if np.linalg.norm(check_dir) < 1e-12:
-            #     #     continue
-            #     # check_dir = check_dir / np.linalg.norm(check_dir)
-            #     check_dir = project_on_vector_space(check_dir, _face_orth.T)
-            # else:
-            #     center = np.linalg.solve(x.T, np.concatenate([_face_orth.T @ pareto_point, group_fairness]))
-            #     check_dir = pareto_point - center
-                
+            try:
+                status, _c = objs.custom_optimal(_A, _b)
+            except Exception as error:
+                print(error)
+                _c = None
+            if status == "infeasible":
+                check_dir = project_on_vector_space(relevance_score, _face_orth.T)
+            elif status == "optimal" :
+                check_dir = -_c + pareto_point
+            else:
+                check_dir = project_on_vector_space(relevance_score, _face_orth.T)
+
+            check_dir[np.abs(check_dir) < 1e-12] = 0
+            if np.linalg.norm(check_dir) < 1e-12:
+                continue
+            check_dir = check_dir / np.linalg.norm(check_dir)
+            check_dir = project_on_vector_space(check_dir, _face_orth.T)
+
             intersect_point = hedron.find_face_intersection_bisection(pareto_point, check_dir)
             if np.linalg.norm(intersect_point-pareto_point) < 1e-6:
                 continue
-
+            
             user_utilities = objs.utils(intersect_point)
-            # print(user_utilities)
             if (user_utilities - pre_util) < 0:
                 continue
             elif np.abs(objs.unfairness(intersect_point) - objs.unfairness(pareto_point)) < 1e-6:
@@ -149,11 +108,18 @@ def projected_path(relevance_score: np.ndarray, item_group_masking: np.ndarray, 
                 max_utils = user_utilities
                 next_point = intersect_point
                 next_face = update_face_by_point(intersect_point, _face_orth, gamma)
-
+                # print(x1, " ", x2, " ", next_point)
+                # next_face = find_face_subspace_without_parent_2(intersect_point, gamma)
+               
+            # print(max_utils)
+            # print(user_utilities)
+            # if user_utilities - max_utils > 1e-6:
+            #     max_utils = user_utilities
+            #     next_point = intersect_point
         if next_point is None:
             break
         nb_iteration += 1
-    
+       
         pareto_set.append(next_point)
         objectives.append(objs.objectives(next_point))
         pareto_point = next_point
@@ -167,34 +133,3 @@ def projected_path(relevance_score: np.ndarray, item_group_masking: np.ndarray, 
 
     # print(objectives)
     return objectives, pareto_set
-
-if __name__ == "__main__":
-    def draw(curves, names):
-        for i in range(len(names)):
-            curve = np.array(curves[i])
-            name = names[i]
-            plt.plot(curve[:, 1], curve[:, 0], marker='o', label=name)
-
-        plt.ylabel("User utility")
-        plt.xlabel("Unfairness")
-        plt.legend(loc='lower right')
-        plt.show()
-
-    n_doc = 20
-    n_group = 8
-    rel, item_group_masking, group_fairness, gamma = load_data(n_doc, n_group, 10)
-    # print(item_group_masking)
-
-    start = time.time()
-    p_obj, p_points = projected_path(rel, item_group_masking, group_fairness, gamma)
-    end = time.time()
-    print(end - start)
-    
-
-    # baseline
-    start = time.time()
-    qp_objs, qp_points = QP.experiment(rel, item_group_masking, gamma, group_fairness, np.arange(1, 21) / 20)
-    end = time.time()
-    print(end - start)
-
-    draw([qp_objs, p_obj], ["baseline", "P-Expo"])

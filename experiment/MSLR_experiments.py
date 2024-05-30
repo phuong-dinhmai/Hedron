@@ -9,7 +9,7 @@ import json
 from sklearn.metrics import ndcg_score
 import matplotlib.pyplot as plt
 
-from main.projected_testing import projected_path
+from main.projected_testing_test import projected_path
 from main.sphere_testing import sphere_path
 from baseline import QP
 

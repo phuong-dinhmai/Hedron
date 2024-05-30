@@ -8,7 +8,7 @@ import time
 
 sys.path.append(os.path.dirname(os.path.dirname(__file__)))
 
-from main.projected_testing import projected_path
+from main.projected_testing_test import projected_path
 from main.sphere_testing import sphere_path
 from baseline import QP
 

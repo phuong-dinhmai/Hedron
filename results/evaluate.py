@@ -25,23 +25,23 @@ def synthetic_ploting(file_name):
     fig.subplots_adjust(wspace=0.35)
 
     ax[0].plot(aggregation_result["qp"][:, 0], aggregation_result["qp"][:, 1], "o-b", label="QP")
-    ax[0].plot(aggregation_result["p_expo"][:, 0], aggregation_result["p_expo"][:, 1], "o-g", label="P-Expo")
-    # ax[0].plot(aggregation_result["s_expo_1"][:, 0], aggregation_result["s_expo_1"][:, 1], "x--y", label="Sphere-Expo (K=1)")
+    # ax[0].plot(aggregation_result["p_expo"][:, 0], aggregation_result["p_expo"][:, 1], "o-g", label="P-Expo")
+    ax[0].plot(aggregation_result["s_expo_1"][:, 0], aggregation_result["s_expo_1"][:, 1], "x--y", label="Sphere-Expo (K=1)")
     ax[0].plot(aggregation_result["s_expo_2"][:, 0], aggregation_result["s_expo_2"][:, 1], "x--r", label="Sphere-Expo (K=3)")
-    # ax[0].plot(aggregation_result["s_expo_3"][:, 0], aggregation_result["s_expo_3"][:, 1], "x--m", label="Sphere-Expo (K=7)")
+    ax[0].plot(aggregation_result["s_expo_3"][:, 0], aggregation_result["s_expo_3"][:, 1], "x--m", label="Sphere-Expo (K=7)")
     ax[0].set_xlabel("Normalized User utility")
     ax[0].set_ylabel("Normalized Unfairness (nDCG)")
     ax[0].legend(loc='upper left')
     ax[0].grid()
     ax[0].set_title('Aggregated Pareto front')
     
-    # num_doc_list = 5 * np.arange(2, 21)
-    num_doc_list = np.arange(8, 21)
+    num_doc_list = 5 * np.arange(2, 21)
+    # num_doc_list = np.arange(8, 21)
     ax[1].plot(num_doc_list, aggregation_running_time["qp"], "o-b", label="QP")
-    ax[1].plot(num_doc_list, aggregation_running_time["p_expo"], "o-g", label="P-Expo")
-    # ax[1].plot(num_doc_list, aggregation_running_time["s_expo_1"], "x--y", label="Sphere-Expo (K=1)")
+    # ax[1].plot(num_doc_list, aggregation_running_time["p_expo"], "o-g", label="P-Expo")
+    ax[1].plot(num_doc_list, aggregation_running_time["s_expo_1"], "x--y", label="Sphere-Expo (K=1)")
     ax[1].plot(num_doc_list, aggregation_running_time["s_expo_2"], "x--r", label="Sphere-Expo (K=3)")
-    # ax[1].plot(num_doc_list, aggregation_running_time["s_expo_3"], "x--m", label="Sphere-Expo (K=7)")
+    ax[1].plot(num_doc_list, aggregation_running_time["s_expo_3"], "x--m", label="Sphere-Expo (K=7)")
     ax[1].set_ylabel("Avg running time (s)")
     ax[1].set_xlabel("Number of items")
     ax[1].grid()
@@ -300,7 +300,7 @@ def real_world_plotting_2(TREC_folder_path, TREC_file_path, MSLR_folder_path, MS
 
 
 if __name__ == "__main__":
-    # synthetic_ploting("results/synthetic/small.json")
+    # synthetic_ploting("results/synthetic/large.json")
     real_world_plotting_2("results/TREC/year_group/", "results/TREC/aggregate.json", "results/MSLR/133/", "results/MSLR/aggregate.json")
 
 
